@@ -1,0 +1,8 @@
+{"Study type": ["Randomized-controlled trial (RCT)", "case report", "case series"]}
+{"Substance": ["LSD", "psilocybin", "mescaline", "DMT", "5-MeO-DMT", "MDMA", "ketamine", "ibogaine", "salvinorin A"]}
+{"Application": ["anxiety disorder", "eating disorder", "depression", "posttraumatic stress disorder", "recreational use", "healthy individuals", "pharmacokinetics"]}
+{"Number of participants": ["<10", "11-50", ">50"]}
+{"Sex of participants": ["male", "female", "both", "not reported"]}
+{"Clinical trial phase": ["0", "1", "2", "3", "4"]}
+{"Adverse event(s)": ["No adverse event(s) reported", "adverse event(s) reported", "no reporting of adverse event(s)"]}
+{"Conclusion": ["positive", "neutral", "negative", "mixed"]}
