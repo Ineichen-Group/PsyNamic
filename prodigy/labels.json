@@ -1,0 +1,9 @@
+{
+    "Study Type": ["Randomized-controlled trial (RCT)", "Case Report", "Case Series", "Cohort Study", "Systematic Review/Meta-analysis", "Case Control Study", "Unknown", "Other"],
+    "Substance": ["LSD", "Psilocybin", "Mescaline", "DMT", "5-MeO-DMT", "MDMA", "Ketamine", "Ibogaine", "Salvinorin A"],
+    "Number of Participants": ["<10", "10-50", ">50", "Unknown"],
+    "Sex of Participants": ["Male", "Female", "Mixed", "Unknown"],
+    "Clinical Trial Phase": ["Phase 0", "Phase 1", "Phase 2", "Phase 3", "Phase 4", "Unknown", "Not Applicable"],
+    "Adverse Event": ["No adverse event(s) were reported", "Adverse event(s) were reported", "No reporting of adverse event(s)", "Not Applicable"],
+    "Conclusion": ["Positive", "Negative", "Neutral", "Mixed", "Unknown"] 
+}
