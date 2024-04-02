@@ -1,0 +1,17 @@
+services:
+  psych:
+    build: 
+      context: .
+      args:
+        PRODIGY_KEY: key # replace with your Prodigy key
+    ports:
+      - "8080:8080"
+    environment:
+      - PRODIGY_HOST=0.0.0.0 
+      - PRODIGY_PORT=8080
+    volumes:
+      - ./prodigy_data:/root/.prodigy
+    command: ["python", "-m", "prodigy", "span-and-textcat", "pubmed_psych", "en", "./input/psychdelic_study_100_20240312.jsonl", "-F", "./recipe.py"]
+volumes:
+  prodigy_data:
+
