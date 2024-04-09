@@ -5,6 +5,7 @@ import json
 import seaborn as sns
 from prodigy.components.preprocess import add_tokens
 from prodigy.components.loaders import JSONL
+from prodigy.types import RecipeSettingsType
 
 # start Prodigy server
 # python -m prodigy span-and-textcat pubmed_psych en ./input/psychdelic_study_50_20240312.jsonl -F ./recipe.py
@@ -17,7 +18,7 @@ from prodigy.components.loaders import JSONL
     file_in=("Path to examples.jsonl file", "positional", None, str),
 )
 
-def custom_recipe(dataset, lang, file_in):
+def custom_recipe(dataset:str, lang: str, file_in: str) -> RecipeSettingsType:
     with open('span_labels.json', 'r') as infile:
         span_labels =  json.load(infile)
         
@@ -58,6 +59,7 @@ def custom_recipe(dataset, lang, file_in):
     stream = add_tokens(nlp, stream)
     stream = add_options(stream)
     blocks = [
+        {"view_id": "html", "html_template": '<p><b>{{title}}</b></p><p>doi: <a href="{{pubmed_url}}" target="_blank">{{doi}}</a></p><p>Published in: {{secondary_title}}</p>'},
         {"view_id": "spans_manual"},
         {"view_id": "choice", "text": None},
     ]
