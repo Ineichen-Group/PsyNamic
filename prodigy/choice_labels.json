@@ -1,0 +1,16 @@
+{
+    "Study Type": ["Randomized-controlled trial (RCT)", "Pre-post study", "Case Report", "Case Series", "Cohort Study", "Cross-Sectional Study", "Systematic Review/Meta-analysis", "Qualitative Study", "Study protocol", "Unknown", "Other"],
+    "Data Type": ["Longitudinal", "Cross-sectional", "Unknown"],
+    "Data Collection": ["Retrospective", "Prospective", "Unknown"],
+    "Clinical Trial Phase": ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Unknown", "Not Applicable"],
+    "Outcomes": ["The ability to drive a car", "Suicide","Functional MRI", "Physiological Functions", "Mental Functions", "Pharmacokinetics"],
+    "Condition": ["Psychiatric Condition", "Pain", "Recreational Drug Use", "Healthy Participants", "Palliative Setting"],
+    "Substance": ["LSD", "Psilocybin", "Mescaline", "DMT", "Ayahuasca", "5-MeO-DMT", "MDMA", "Ketamine", "Ibogaine", "Salvinorin A", "Combination Therapy"],
+    "Number of Participants": ["1-20", "21-40", "41-60","61-80", "81-100",">100", "Unknown"],
+    "Sex of Participants": ["Male", "Female", "Both sexes", "Unknown"],
+    "Age of Participants": ["Pediatric (< 18 years old)", "Adult (≥18 years)", "Unknown"],
+    "Adverse Event": ["No adverse event(s) were reported", "Adverse event(s) were reported", "No reporting of adverse event(s)", "Not Applicable"],
+    "Conclusion": ["Positive", "Negative", "Neutral", "Mixed", "Unknown", "Not Applicable"],
+    "Regimen": ["Microdosing", "Multiple Applications", "Single Dose"],
+    "Substance Naivety": ["Substance-Naïve Participants", "Substance-non-naïve participants", "Unknown"]
+}
