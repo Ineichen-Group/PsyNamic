@@ -11,7 +11,7 @@ services:
       - PRODIGY_PORT=8080
     volumes:
       - ./prodigy_data:/root/.prodigy
-    command: ["python", "-m", "prodigy", "span-and-textcat", "pubmed_psych", "en", "./input/psychdelic_study_100_20240409.jsonl", "-F", "./recipe.py"]
+    command: ["python", "-m", "prodigy", "span-and-textcat", "pubmed_psych", "en", "./input/psychdelic_study_100_20240411.jsonl", "-F", "./recipe.py"]
 volumes:
   prodigy_data:
 

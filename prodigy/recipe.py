@@ -59,7 +59,7 @@ def custom_recipe(dataset:str, lang: str, file_in: str) -> RecipeSettingsType:
     stream = add_tokens(nlp, stream)
     stream = add_options(stream)
     blocks = [
-        {"view_id": "html", "html_template": '<p><b>{{title}}</b></p><p>doi: <a href="{{pubmed_url}}" target="_blank">{{doi}}</a></p><p>Published in: {{secondary_title}}</p>'},
+        {"view_id": "html", "html_template": '<p>doi: <a href="{{pubmed_url}}" target="_blank">{{doi}}</a></p><p>Published in: {{secondary_title}}</p>'},
         {"view_id": "spans_manual"},
         {"view_id": "choice", "text": None},
     ]
