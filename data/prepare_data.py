@@ -88,7 +88,7 @@ def generate_annotation_log(annotation_log: str, raw_data: str) -> None:
     # Check if there are duplicates in record_id
     if df['record_id'].duplicated().any():
         raise ValueError('Duplicates in record_id column')
-    log = pd.DataFrame({'record_id': df['record_id'], 'annotated': False})
+    log = pd.DataFrame({'record_id': df['record_id'], 'annotated': False, 'data_set': ''})
     log.to_csv(annotation_log, index=False)
 
 
@@ -97,7 +97,9 @@ def update_annotation_log(sample_file: str) -> None:
     with open(sample_file, 'r') as infile:
         for line in infile:
             record_id = json.loads(line)['record_id']
-            # set annotated to True
+            # set annotated to True and add sample file name
+            sample_file_name = os.path.basename(sample_file)
+            log_df.loc[log_df['record_id'] == record_id, 'data_set'] = sample_file_name
             log_df.loc[log_df['record_id'] == record_id, 'annotated'] = True
 
     current_date = datetime.now().strftime('%Y%m%d')
@@ -123,18 +125,28 @@ def annotation_progress() -> None:
 def main():
 
     # Load the raw data and prepare it
-    # raw_data = 'raw_data/asreview_dataset_relevant_Psychedelic Study.csv'
+    raw_data = 'raw_data/asreview_dataset_relevant_Psychedelic Study.csv'
+    cleaned_data = 'raw_data/dataset_relevant_cleaned.csv'
+    annotation_log = 'prodigy_inputs/annotation_logs/annotation_log.csv'
+    
     # df = pd.read_csv(raw_data)
     # prepare_df = prepare_data(df)
     # prepare_df.to_csv('raw_data/dataset_relevant_cleaned.csv', index=False)
 
     # Generate annotation log: record_id, annotated
-    # annotation_log = 'prodigy_inputs/annotation_logs/annotation_log.csv'
-    # generate_annotation_log(annotation_log, raw_data)
+    generate_annotation_log(annotation_log, raw_data)
+    
+    # Add 100 samples from V3 to annotation log
     new_annotated = 'prodigy_inputs/psychedelic_study_100_20240411.jsonl'
     update_annotation_log(new_annotated)
-    cleaned_data = 'raw_data/dataset_relevant_cleaned.csv'
+    annotation_progress()
+    
+    # Generate subsample of 50 and 100 samples
     subsample_file = generate_subsample(cleaned_data, 50)
+    update_annotation_log(subsample_file)
+    annotation_progress()
+    
+    subsample_file = generate_subsample(cleaned_data, 100)
     update_annotation_log(subsample_file)
     annotation_progress()
 
