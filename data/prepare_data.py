@@ -66,6 +66,8 @@ def generate_subsample(data_file: str, n: int, annotation_log: bool = True) -> s
     df = pd.read_csv(data_file)
     relevant_cols = ['record_id',  'keywords', 'text',
                      'doi', 'pubmed_url', 'secondary_title']
+    # remove nan
+    df = df.fillna('')
     data = df[relevant_cols].to_dict(orient='records')
 
     if annotation_log:
@@ -94,6 +96,8 @@ def generate_annotation_log(annotation_log: str, raw_data: str) -> None:
 
 def update_annotation_log(sample_file: str) -> None:
     log_df = _get_most_recent_annotation_log()
+    log_df['data_set'] = log_df['data_set'].astype(str)
+    log_df['data_set'] = log_df['data_set'].replace('nan', '')
     with open(sample_file, 'r') as infile:
         for line in infile:
             record_id = json.loads(line)['record_id']
