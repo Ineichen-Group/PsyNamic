@@ -11,9 +11,5 @@
 {"pattern": [{"lower": "esketamine"}], "label": "P-Substance"}
 {"pattern": [{"lower": "ibogaine"}], "label": "P-Substance"}
 {"pattern": [{"lower": "salvinorin"}], "label": "P-Substance"}
-{"pattern": [{"lower": "male"}], "label": "P-Sex"}
-{"pattern": [{"lower": "man"}], "label": "P-Sex"}
-{"pattern": [{"lower": "men"}], "label": "P-Sex"}
-{"pattern": [{"lower": "female"}], "label": "P-Sex"}
-{"pattern": [{"lower": "woman"}], "label": "P-Sex"}
-{"pattern": [{"lower": "women"}], "label": "P-Sex"}
+{"pattern": [{"lower": "s-ketamine"}], "label": "P-Substance"}
+{"pattern": [{"lower": "r-ketamine"}], "label": "P-Substance"}
