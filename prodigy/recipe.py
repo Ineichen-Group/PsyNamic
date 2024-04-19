@@ -13,7 +13,7 @@ import copy
 
 
 # start Prodigy server
-# python -m prodigy span-and-textcat pubmed_psych en ./input/psychdelic_study_50_20240312.jsonl -F ./recipe.py
+# python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_50_20240312.jsonl -F ./recipe.py
 
 
 @prodigy.recipe(

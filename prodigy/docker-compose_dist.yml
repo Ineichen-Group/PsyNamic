@@ -1,5 +1,6 @@
 services:
   psych:
+    stdin_open: true
     build: 
       context: .
       args:
@@ -12,8 +13,6 @@ services:
     volumes:
       - ./prodigy_data:/root/.prodigy
       - ./export:/export
-    command: ["python", "-m", "prodigy", "span-and-textcat", "pubmed_psych", "en", "./input/psychdelic_study_100_20240411.jsonl", "-F", "./recipe.py", "-pt", "prodigy/patterns.jsonl"]
 volumes:
   prodigy_data:
   export:
-

@@ -5,6 +5,12 @@ build:
 start:
 	docker compose up -d
 
+start-50: start
+	docker compose exec -d psych sh -c "python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_50_20240418.jsonl -F ./recipe.py -pt /patterns.jsonl"
+
+start-100: start
+	docker compose exec -d psych sh -c "python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_100_20240418.jsonl -F ./recipe.py -pt /patterns.jsonl"
+
 stop:
 	docker compose down
 
