@@ -1,15 +1,48 @@
-{"pattern": [{"lower": "lsd"}], "label": "P-Substance"}
-{"pattern": [{"lower": "psilocybin"}], "label": "P-Substance"}
-{"pattern": [{"lower": "psilocin"}], "label": "P-Substance"}
-{"pattern": [{"lower": "mescaline"}], "label": "P-Substance"}
-{"pattern": [{"lower": "dmt"}], "label": "P-Substance"}
-{"pattern": [{"lower": "ayahuasca"}], "label": "P-Substance"}
-{"pattern": [{"lower": "5-meo-dmt"}], "label": "P-Substance"}
-{"pattern": [{"lower": "mdma"}], "label": "P-Substance"}
-{"pattern": [{"lower": "ecstasy"}], "label": "P-Substance"}
-{"pattern": [{"lower": "ketamine"}], "label": "P-Substance"}
-{"pattern": [{"lower": "esketamine"}], "label": "P-Substance"}
-{"pattern": [{"lower": "ibogaine"}], "label": "P-Substance"}
-{"pattern": [{"lower": "salvinorin"}], "label": "P-Substance"}
-{"pattern": [{"lower": "s-ketamine"}], "label": "P-Substance"}
-{"pattern": [{"lower": "r-ketamine"}], "label": "P-Substance"}
+{"lower": "lsd", "label": "P-Highlight"}
+{"lower": "psilocybin", "label": "P-Highlight"}
+{"lower": "psilocin", "label": "P-Highlight"}
+{"lower": "mescaline", "label": "P-Highlight"}
+{"lower": "dmt", "label": "P-Highlight"}
+{"lower": "ayahuasca", "label": "P-Highlight"}
+{"lower": "5-meo-dmt", "label": "P-Highlight"}
+{"lower": "mdma", "label": "P-Highlight"}
+{"lower": "ecstasy", "label": "P-Highlight"}
+{"lower": "ketamine", "label": "P-Highlight"}
+{"lower": "esketamine", "label": "P-Highlight"}
+{"lower": "ibogaine", "label": "P-Highlight"}
+{"lower": "salvinorin", "label": "P-Highlight"}
+{"lower": "s-ketamine", "label": "P-Highlight"}
+{"lower": "r-ketamine", "label": "P-Highlight"}
+{"lower": {"REGEX": ".*spective.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*[fe]?male.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*wom[ae]n.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*m[ae]n.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*random.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*cohort.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*control.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*placebo.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*safety.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*toxicity.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*event.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*psychotherapy.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*oral.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*nasal.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*venous.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*infusion.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*microdosing.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*suicid.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*depression.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*anxiety.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*abuse.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*pain.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*cancer.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*healthy.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*ptsd.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*mri.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*eeg.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*heart.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*rate.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*blood.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*pressure.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*interview.*"}, "label": "P-Highlight"}
+{"lower": {"REGEX": ".*phase.*"}, "label": "P-Highlight"}

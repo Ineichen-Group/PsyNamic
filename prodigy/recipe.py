@@ -10,6 +10,7 @@ from prodigy.models.matcher import PatternMatcher
 from prodigy.components.loaders import JSONL
 from prodigy.types import RecipeSettingsType
 import copy
+import re
 
 
 # start Prodigy server
@@ -31,6 +32,7 @@ def custom_recipe(
     patterns: Optional[str] = None
 ) -> RecipeSettingsType:
 
+    patterns = create_patterns_jsonl(patterns)
     # Fetch labels from json files
     with open('span_labels.json', 'r') as infile:
         span_labels = json.load(infile)
@@ -115,3 +117,24 @@ def get_keymap(labels: dict[list]) -> dict[str, str]:
             keymap[str(i)] = key
             i += 1
     return keymap
+
+def create_patterns_jsonl(input_file: str) -> str:
+    with open(input_file, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    patterns = []
+
+    for line in lines:
+        line = line.strip()
+
+        if line.startswith('*'):
+            pattern = {"lower": {"REGEX": f".{line}.*"}, "label": "P-Highlight"}
+        else:
+            pattern = {"lower": line, "label": "P-Highlight"}
+
+        patterns.append(pattern)
+    output_file = input_file.replace('.txt', '.jsonl')
+    with open(output_file, 'w', encoding='utf-8') as f:
+        for pattern in patterns:
+            f.write(json.dumps(pattern) + '\n')
+    return output_file
