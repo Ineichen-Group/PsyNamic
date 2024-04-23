@@ -5,6 +5,7 @@ import requests
 from datetime import datetime
 from tqdm import tqdm
 import os
+import time
 
 ANNOTATION_DIR = 'prodigy_inputs/annotation_logs/'
 PRODIGY_INPUTS_DIR = 'prodigy_inputs/'
@@ -60,7 +61,6 @@ def prepare_data(df: pd.DataFrame) -> pd.DataFrame:
     df['text'] = df['title'] + '.^\n' + df['abstract']
     return df
 
-
 def generate_subsample(data_file: str, n: int, annotation_log: bool = True) -> str:
     """ Generate a random subsample of n articles from the given DataFrame and save it as a JSONL file."""
     df = pd.read_csv(data_file)
@@ -77,11 +77,13 @@ def generate_subsample(data_file: str, n: int, annotation_log: bool = True) -> s
         data = [d for d in data if d['record_id'] not in exclude]
     random_subset = random.sample(data, n)
     current_date = datetime.now().strftime('%Y%m%d')
-    output_file = f'{PRODIGY_INPUTS_DIR}/psychedelic_study_{n}_{current_date}.jsonl'
+    current_time = datetime.now().strftime('%H%M%S')
+    output_file = f'{PRODIGY_INPUTS_DIR}/psychedelic_study_{n}_{current_date}_{current_time}.jsonl'
+    
     with open(output_file, 'w', encoding='utf-8') as f:
         for d in random_subset:
             f.write(json.dumps(d) + '\n')
-
+    time.sleep(1)
     return output_file
 
 
@@ -138,21 +140,32 @@ def main():
     # prepare_df.to_csv('raw_data/dataset_relevant_cleaned.csv', index=False)
 
     # Generate annotation log: record_id, annotated
-    generate_annotation_log(annotation_log, raw_data)
+    # generate_annotation_log(annotation_log, raw_data)
     
-    # Add 100 samples from V3 to annotation log
-    new_annotated = 'prodigy_inputs/psychedelic_study_100_20240411.jsonl'
-    update_annotation_log(new_annotated)
+    # # Add 100 samples from V3 to annotation log
+    # new_annotated = 'prodigy_inputs/psychedelic_study_100_20240411.jsonl'
+    # update_annotation_log(new_annotated)
+    # annotation_progress()
+    
+    # # Generate subsample of 50 and 100 samples
+    # subsample_file = generate_subsample(cleaned_data, 50)
+    # update_annotation_log(subsample_file)
+    # annotation_progress()
+    
+    # subsample_file = generate_subsample(cleaned_data, 100)
+    # update_annotation_log(subsample_file)
+    # annotation_progress()
+    subsample = generate_subsample(cleaned_data, 250)
+    update_annotation_log(subsample)
+    subsample = generate_subsample(cleaned_data, 250)
+    update_annotation_log(subsample)
+    subsample = generate_subsample(cleaned_data, 250)
+    update_annotation_log(subsample)
+    subsample = generate_subsample(cleaned_data, 250)
+    update_annotation_log(subsample)
     annotation_progress()
     
-    # Generate subsample of 50 and 100 samples
-    subsample_file = generate_subsample(cleaned_data, 50)
-    update_annotation_log(subsample_file)
-    annotation_progress()
     
-    subsample_file = generate_subsample(cleaned_data, 100)
-    update_annotation_log(subsample_file)
-    annotation_progress()
 
 
 if __name__ == '__main__':
