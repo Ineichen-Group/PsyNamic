@@ -14,9 +14,12 @@ salvinorin
 s-ketamine
 r-ketamine
 *spective
-*[fe]?male
-*wom[ae]n
-*m[ae]n
+female
+male
+woman
+women
+man
+men
 *random
 *cohort
 *control
@@ -41,7 +44,7 @@ r-ketamine
 *mri
 *eeg
 *heart
-*rate
+rate
 *blood
 *pressure
 *interview
