@@ -128,9 +128,10 @@ def create_patterns_jsonl(input_file: str) -> str:
         line = line.strip()
 
         if line.startswith('*'):
-            pattern = {"lower": {"REGEX": f".{line}.*"}, "label": "P-Highlight"}
+            pattern = {"lower": {"REGEX": f'.{line}.*'}}
         else:
-            pattern = {"lower": line, "label": "P-Highlight"}
+            pattern = {"lower": line}
+        pattern = {"pattern": [pattern], "label": "P-Highlight"}
 
         patterns.append(pattern)
     output_file = input_file.replace('.txt', '.jsonl')
