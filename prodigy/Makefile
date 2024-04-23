@@ -5,11 +5,23 @@ build:
 start:
 	docker compose up -d
 
-start-50: start
-	docker compose exec -d psych sh -c "python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_50_20240418.jsonl -F ./recipe.py -pt ./patterns.txt"
+# start-50: start
+# 	docker compose exec -d psych sh -c "python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_50_20240418.jsonl -F ./recipe.py -pt ./patterns.txt"
 
-start-100: start
-	docker compose exec -d psych sh -c "python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_100_20240418.jsonl -F ./recipe.py -pt ./patterns.txt"
+# start-100: start
+# 	docker compose exec -d psych sh -c "python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_100_20240418.jsonl -F ./recipe.py -pt ./patterns.txt"
+
+start-ben: start
+	docker compose exec -d psych sh -c "python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_250_20240423_113434.jsonl -F ./recipe.py -pt ./patterns.txt"
+
+start-julia: start
+	docker compose exec -d psych sh -c "python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_250_20240423_113435.jsonl -F ./recipe.py -pt ./patterns.txt"
+
+start-bernard: start
+	docker compose exec -d psych sh -c "python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_250_20240423_113436.jsonl -F ./recipe.py -pt ./patterns.txt"
+
+start-pia: start
+	docker compose exec -d psych sh -c "python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_250_20240423_113437.jsonl -F ./recipe.py -pt ./patterns.txt"
 
 stop:
 	docker compose down
