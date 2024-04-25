@@ -1,4 +1,5 @@
 {
+    "Study Characteristics": {
         "Study Type": ["Randomized-controlled trial (RCT)", "Cohort study", "Real-world study", "Study protocol", "Systematic review/meta-analysis", "Qualitative Study", "Case report", "Case series", "Other"],
         "Study Purpose": ["Efficacy endpoints", "Safety endpoints", "Pharmacokinetics", "Mechanism of action", "Disease model study", "Demographic study"],
         "Study Control": ["Placebo", "Active control", "Pre-post", "Other control", "Non-controlled","Not applicable"],
@@ -6,14 +7,19 @@
         "Data Collection": ["Retrospective", "Prospective", "Unknown", "Not applicable"],
         "Number of Participants": ["1-20", "21-40", "41-60","61-80", "81-100", "100-199", "200-499", "500-999", "≥1000", "Unknown", "Not applicable"],
         "Sex of Participants": ["Male", "Female", "Both sexes", "Unknown", "Not applicable"],
-        "Age of Participants": ["Pediatric (< 18 years old)", "Adult (≥18 years)", "Unknown", "Not applicable"],
+        "Age of Participants": ["Pediatric (< 18 years old)", "Adult (≥18 years)", "Unknown", "Not applicable"]
+    }, 
+    "Substance(s)": {
         "Substances": ["Ketamine", "S-Ketamine", "R-Ketamine", "MDMA", "LSD", "Psilocybin", "Psychedelic mushrooms", "Ayahuasca", "DMT", "5-MeO-DMT", "Mescaline",  "Ibogaine", "Salvinorin A", "Combination Therapy", "Analogue", "Unknown"],
         "Application Form": ["Oral", "Nasal", "Intravenous", "Smoking", "Subcutaneous", "Other", "Unknown", "Not applicable"],
         "Regimen": ["Microdosing", "Multiple Applications", "Single Dose", "Unknown"],
         "Setting": ["Clinical", "Naturalistic", "Party setting", "Other setting", "Unknown", "Not applicable"],
-        "Substance Naivety": ["Substance-Naïve Participants", "Substance-non-naïve participants", "Unknown", "Not applicable"], 
+        "Substance Naivety": ["Substance-Naïve Participants", "Substance-non-naïve participants", "Unknown", "Not applicable"]
+    },
+    "Clinical Measure": {
         "Condition": ["Psychiatric condition", "Depression", "Anxiety", "Post-traumatic stress disorder (PTSD)", "Alcoholism", "Other addictions (e.g. smoking)", "Anorexia", "Alzheimer’s disease", "Non-Alzheimer dementia", "Substance abuse", "(Chronic) Pain", "Palliative Setting", "Recreational Drug Use", "Healthy Participants"],
         "Outcomes": ["The ability to drive a car", "Suicide", "Functional MRI", "MRI", "PET, SPECT", "Physiological Functions", "Electroencephalography (EEG)", "Mental Functions", "Psychedelic experience", "Soluble biomarker", "Surveys", "Interviews", "Neurotoxicity",  "Emergency department visits"],
         "Clinical Trial Phase": ["Phase 1", "Phase 2", "Phase 3", "Phase 4", "Unknown", "Not Applicable"],
         "Study Conclusion": ["Positive", "Negative", "Neutral", "Mixed", "Unknown", "Not Applicable"]
+    }
 }
