@@ -193,15 +193,19 @@ def main():
     # annotation_progress()
         
         
-    subsample = generate_subsample(cleaned_data, 250)
-    update_annotation_log(subsample)
-    annotation_progress()
+    # subsample = generate_subsample(cleaned_data, 250)
+    # update_annotation_log(subsample)
+    # annotation_progress()
     
 
-    subsample = generate_subsample(cleaned_data, 250)
-    update_annotation_log(subsample)
-    annotation_progress()
+    # subsample = generate_subsample(cleaned_data, 250)
+    # update_annotation_log(subsample)
+    # annotation_progress()
 
+    # subsample = generate_subsample(cleaned_data, 250)
+    # update_annotation_log(subsample)
+    # annotation_progress()
+    
     subsample = generate_subsample(cleaned_data, 250)
     update_annotation_log(subsample)
     annotation_progress()

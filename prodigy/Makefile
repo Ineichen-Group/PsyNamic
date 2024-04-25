@@ -23,7 +23,7 @@ start-ben:
 start-julia: 
 	docker compose down
 	docker compose up -d
-	docker compose exec -d psych sh -c "python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_250_20240425_134820.jsonl -F ./recipe.py -pt ./patterns.txt"
+	docker compose exec -d psych sh -c "python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_250_20240425_152801.jsonl -F ./recipe.py -pt ./patterns.txt"
 
 start-bernard:
 	docker compose down
