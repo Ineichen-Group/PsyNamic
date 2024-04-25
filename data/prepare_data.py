@@ -62,8 +62,9 @@ def prepare_data(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def generate_subsample(data_file: str, n: int, annotation_log: bool = True) -> str:
+def generate_subsample(data_file: str, n: int, annotation_log: bool = True, random_seed=42) -> str:
     """ Generate a random subsample of n articles from the given DataFrame and save it as a JSONL file."""
+    random.seed(random_seed)
     df = pd.read_csv(data_file)
     relevant_cols = ['record_id',  'keywords', 'text',
                      'doi', 'pubmed_url', 'secondary_title']
@@ -128,6 +129,17 @@ def _get_most_recent_annotation_log() -> pd.DataFrame:
     return pd.read_csv(annotation_log_path)
 
 
+def remove_from_annotation_log(subsample: str) -> None:
+    log_df = _get_most_recent_annotation_log()
+    rows_index = log_df.index[log_df['data_set'] == subsample]
+    log_df.loc[rows_index, 'annotated'] = False
+    log_df.loc[rows_index, 'data_set'] = ''
+
+    current_date = datetime.now().strftime('%Y%m%d')
+    new_log = f'annotation_log_{current_date}.csv'
+    new_log_path = os.path.join(ANNOTATION_DIR, new_log)
+    log_df.to_csv(new_log_path, index=False)
+
 def annotation_progress() -> None:
     log_df = _get_most_recent_annotation_log()
     total = log_df.shape[0]
@@ -170,11 +182,33 @@ def main():
     # update_annotation_log(subsample)
     # subsample = generate_subsample(cleaned_data, 250)
     # update_annotation_log(subsample)
+
+    # remove julia, bernard, pia
     # annotation_progress()
-    subsample = generate_subsample(cleaned_data, 123)
+    # remove_from_annotation_log('psychedelic_study_250_20240423_113435.jsonl')
+    # annotation_progress()
+    # remove_from_annotation_log('psychedelic_study_250_20240423_113436.jsonl')
+    # annotation_progress()
+    # remove_from_annotation_log('psychedelic_study_250_20240423_113437.jsonl')
+    # annotation_progress()
+        
+        
+    subsample = generate_subsample(cleaned_data, 250)
+    update_annotation_log(subsample)
+    annotation_progress()
+    
+
+    subsample = generate_subsample(cleaned_data, 250)
+    update_annotation_log(subsample)
+    annotation_progress()
+
+    subsample = generate_subsample(cleaned_data, 250)
+    update_annotation_log(subsample)
+    annotation_progress()
 
 
 
+    
 if __name__ == '__main__':
 
     main()
