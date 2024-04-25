@@ -41,7 +41,7 @@ stop:
 db-export: start
 		docker compose exec psych sh -c "prodigy db-out pubmed_psych > /export/prodigy_export_$$(date +%Y%m%d_%H%M%S).jsonl"
 
-db-reset:
+db-reset: stop
 	rm -r ./prodigy_data/*
 
 logs:

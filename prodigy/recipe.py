@@ -8,7 +8,7 @@ import seaborn as sns
 import spacy
 
 import prodigy
-from prodigy import set_hashes
+from prodigy import set_hashes, log
 from prodigy.components.preprocess import add_tokens
 from prodigy.components.stream import get_stream
 from prodigy.models.matcher import PatternMatcher
@@ -16,6 +16,7 @@ from prodigy.types import RecipeSettingsType
 
 # start Prodigy server
 # python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_50_20240312.jsonl -F ./recipe.py
+
 
 @prodigy.recipe(
     "span-and-textcat",
@@ -40,19 +41,18 @@ def custom_recipe(
     with open('choice_labels.json', 'r') as infile:
         labels = json.load(infile)
 
-    colors = get_colors(labels)
-    keymap = get_keymap(labels)
-
     flat_labels = []
     for _, sub_labels in labels.items():
         for label, values in sub_labels.items():
             for value in values:
                 flat_labels.append(f"{label}: {value}")
 
+    colors = get_colors(labels)
 
     nlp = spacy.load(f'blank:{lang}')
     stream = get_stream(file_in, dedup=False, rehash=True)
-    stream = (set_hashes(eg, task_keys=("annotation",), overwrite=True) for eg in stream)
+    stream = (set_hashes(eg, task_keys=("annotation",), overwrite=True)
+              for eg in stream)
     stream = add_options_and_highlights(
         stream, flat_labels, colors, nlp, patterns, labels)
     stream = add_tokens(nlp, stream)
@@ -70,7 +70,7 @@ def custom_recipe(
             "lang": nlp.lang,
             "labels": span_labels,
             "blocks": blocks,
-            "keymap_by_label": keymap,
+            "keymap_by_label": None,
             "choice_style": "multiple"
         },
     }
@@ -98,7 +98,7 @@ def add_options_and_highlights(
     options = [
         {"text": lab, "style": {"background-color": c}} for i, (lab, c) in enumerate(zip(flat_labels, colors))
     ]
-    #for score, eg in matcher(stream):
+    # for score, eg in matcher(stream):
     for eg in stream:
         current_annotation = eg['annotation']
         filtered_options = filter_options(options, labels[current_annotation])
@@ -111,7 +111,6 @@ def filter_options(options: list[dict], label_group: dict):
     """Filter the options based on the labels_sorted dictionary."""
     filtered_options = []
     flattened_labels = [label for label in label_group.keys()]
-
     for option_dict in options:
         label_group = option_dict['text'].split(': ')[0]
         if label_group in flattened_labels:
@@ -128,26 +127,23 @@ def convert_color(value: float):
     return round(value * 255)
 
 
-def get_colors(labels: dict[str, list[str]]):
+def get_colors(labels: dict) -> list[str]:
     """Get a list of colors as a rbga strings, one for each label.
     Can be fed directly into css"""
-    color_palette = sns.color_palette("Paired", len(labels))
+    labels_flatter = {}
+
+    for _, label_group in labels.items():
+        for label, options in label_group.items():
+            labels_flatter[label] = options
+
+    color_palette = sns.color_palette("Paired", len(labels_flatter))
     color_strings = [
         f'rgba({convert_color(r)}, {convert_color(g)}, {convert_color(b)}, 0.3)' for r, g, b in color_palette]
     colors = [color for sublist, color in zip(
-        labels.values(), color_strings) for label in sublist]
+        labels_flatter.values(), color_strings) for label in sublist]
+
     return colors
 
-# Hacky solution to use keymapping for grouping the labels
-def get_keymap(labels: dict[list]) -> dict[str, str]:
-    """ Use keymap to group the labels."""
-    keymap = {}
-    i = 0
-    for key, values in labels.items():
-        for value in values:
-            keymap[str(i)] = key
-            i += 1
-    return keymap
 
 def create_patterns_jsonl(input_file: str) -> str:
     with open(input_file, 'r', encoding='utf-8') as f:
@@ -168,5 +164,3 @@ def create_patterns_jsonl(input_file: str) -> str:
     output_file = input_file.replace('.txt', '.jsonl')
 
     return output_file
-
-
