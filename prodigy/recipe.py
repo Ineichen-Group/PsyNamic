@@ -58,9 +58,8 @@ def custom_recipe(
     stream = add_tokens(nlp, stream)
 
     blocks = [
-        {"view_id": "html", "html_template": '<p>doi: <a href="{{pubmed_url}}" target="_blank">{{doi}}</a></p><p>Published in: {{secondary_title}}</p>'},
+        {"view_id": "html", "html_template": '<p>Annotating: <b>{{annotation}}</b></p><p>doi: <a href="{{pubmed_url}}" target="_blank">{{doi}}</a></p><p>Published in: {{secondary_title}}</p>'},
         {"view_id": "spans_manual"},
-        {"view_id": "html", "html_template": '<p>Annotating: <b>{{annotation}}</b></p>}'},
         {"view_id": "choice", "text": None},
     ]
     return {
