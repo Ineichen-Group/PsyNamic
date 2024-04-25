@@ -1,21 +1,21 @@
 # reference code https://github.com/explosion/prodigy-recipes/tree/master/tutorials/span-and-textcat
-import spacy
-import prodigy
-import json
-import seaborn as sns
-from typing import Optional
-from prodigy import recipe, log, get_stream
-from prodigy.components.preprocess import add_tokens
-from prodigy.models.matcher import PatternMatcher
-from prodigy.components.loaders import JSONL
-from prodigy.types import RecipeSettingsType
 import copy
+import json
 import re
+from typing import Optional
 
+import seaborn as sns
+import spacy
+
+import prodigy
+from prodigy import set_hashes
+from prodigy.components.preprocess import add_tokens
+from prodigy.components.stream import get_stream
+from prodigy.models.matcher import PatternMatcher
+from prodigy.types import RecipeSettingsType
 
 # start Prodigy server
 # python -m prodigy span-and-textcat pubmed_psych en ./input/psychedelic_study_50_20240312.jsonl -F ./recipe.py
-
 
 @prodigy.recipe(
     "span-and-textcat",
@@ -42,18 +42,25 @@ def custom_recipe(
 
     colors = get_colors(labels)
     keymap = get_keymap(labels)
-    # Flatten the labels
-    flat_labels = [f'{group}: {label}' for group,
-                   sublist in labels.items() for label in sublist]
+
+    flat_labels = []
+    for _, sub_labels in labels.items():
+        for label, values in sub_labels.items():
+            for value in values:
+                flat_labels.append(f"{label}: {value}")
+
 
     nlp = spacy.load(f'blank:{lang}')
-    stream = get_stream(file_in)
-    stream = add_options_and_highlights(stream, flat_labels, colors, nlp, patterns)
+    stream = get_stream(file_in, dedup=False, rehash=True)
+    stream = (set_hashes(eg, task_keys=("annotation",), overwrite=True) for eg in stream)
+    stream = add_options_and_highlights(
+        stream, flat_labels, colors, nlp, patterns, labels)
     stream = add_tokens(nlp, stream)
-    
+
     blocks = [
         {"view_id": "html", "html_template": '<p>doi: <a href="{{pubmed_url}}" target="_blank">{{doi}}</a></p><p>Published in: {{secondary_title}}</p>'},
         {"view_id": "spans_manual"},
+        {"view_id": "html", "html_template": '<p>Annotating: <b>{{annotation}}</b></p>}'},
         {"view_id": "choice", "text": None},
     ]
     return {
@@ -69,40 +76,65 @@ def custom_recipe(
         },
     }
 
+
 def add_options_and_highlights(
         stream,
         flat_labels: list[str],
         colors: list[str],
         nlp: spacy.language.Language,
-        patterns: str):
-    
+        patterns: str,
+        labels: dict[str, list[str]] = None):
+
     matcher = PatternMatcher(
         nlp,
-        label_span=False, # no label added to the span
-        label_task=False, # no label on top level task
-        combine_matches=True, # show all matches in one task
-        all_examples=True, # alle examples are returned
+        label_span=False,  # no label added to the span
+        label_task=False,  # no label on top level task
+        combine_matches=True,  # show all matches in one task
+        all_examples=True,  # alle examples are returned
+        task_hash_keys=("annotation",),
     )
 
     matcher = matcher.from_disk(patterns)
 
     options = [
-        {"id": i, "text": lab, "style": {"background-color": c}} for i, (lab, c) in enumerate(zip(flat_labels, colors))
+        {"text": lab, "style": {"background-color": c}} for i, (lab, c) in enumerate(zip(flat_labels, colors))
     ]
-    for score, eg in matcher(stream):
+    #for score, eg in matcher(stream):
+    for eg in stream:
+        current_annotation = eg['annotation']
+        filtered_options = filter_options(options, labels[current_annotation])
         task = copy.deepcopy(eg)
-        task["options"] = options
+        task["options"] = filtered_options
         yield task
+
+
+def filter_options(options: list[dict], label_group: dict):
+    """Filter the options based on the labels_sorted dictionary."""
+    filtered_options = []
+    flattened_labels = [label for label in label_group.keys()]
+
+    for option_dict in options:
+        label_group = option_dict['text'].split(': ')[0]
+        if label_group in flattened_labels:
+            filtered_options.append(option_dict)
+    # add ids to the options
+    for i, option in enumerate(filtered_options):
+        option['id'] = i
+
+    return filtered_options
+
 
 def convert_color(value: float):
     """Convert a value between 0 and 1 to a color value between 0 and 255."""
     return round(value * 255)
 
+
 def get_colors(labels: dict[str, list[str]]):
     """Get a list of colors as a rbga strings, one for each label.
     Can be fed directly into css"""
     color_palette = sns.color_palette("Paired", len(labels))
-    color_strings = [f'rgba({convert_color(r)}, {convert_color(g)}, {convert_color(b)}, 0.3)' for r, g, b in color_palette]
+    color_strings = [
+        f'rgba({convert_color(r)}, {convert_color(g)}, {convert_color(b)}, 0.3)' for r, g, b in color_palette]
     colors = [color for sublist, color in zip(
         labels.values(), color_strings) for label in sublist]
     return colors
@@ -135,7 +167,7 @@ def create_patterns_jsonl(input_file: str) -> str:
 
         patterns.append(pattern)
     output_file = input_file.replace('.txt', '.jsonl')
-    with open(output_file, 'w', encoding='utf-8') as f:
-        for pattern in patterns:
-            f.write(json.dumps(pattern) + '\n')
+
     return output_file
+
+
