@@ -4,13 +4,13 @@
 | Prodigy Version | Dataset | Size | Annotator| Annotations Received
 | ----------- | ----------- |-------|-----------|-----------
 | V2 | psychedelic_study_100_20240409.jsonl  | 20 | Ben | x
-| V3  | psychedelic_study_100_20240409.jsonl  | 100 | Ben | x
+| V3  | psychedelic_study_100_20240411.jsonl  | 100 | Ben | x
 
 
 ## Real Annotation
 | Prodigy Version | Dataset | Size | Annotator | Annotations Received
 | ----------- | ----------- |-------|-----------|-----------
-| V4 | psychedelic_study_50_20240418 | 50 | Ben, Bernard, Julia, Pia
+| V4 | psychedelic_study_50_20240418 | 50 | Ben, Bernard, Julia, Pia | Ben
 | V4 | psychedelic_study_100_20240418 | 100 | Ben | x
 | ----------- | ----------- |-------|-----------|-----------
 | V6 | psychedelic_study_250_20240425_134820.jsonl | 250 | Julia |
