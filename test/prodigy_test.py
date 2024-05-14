@@ -1,10 +1,13 @@
+import os
 import unittest
 import pandas as pd
-import os
 from data.prodigy_data_reader import *
 
+# Run single test:
+# python -m unittest test.prodigy_test.TestParseProdigyData.test_get_classification_tasks
 
-class TestCalculateOverallCohenKappa(unittest.TestCase):
+
+class TestParseProdigyData(unittest.TestCase):
 
     def setUp(self):
         self.relative_path = os.path.dirname(__file__)
@@ -33,12 +36,12 @@ class TestCalculateOverallCohenKappa(unittest.TestCase):
     def test_read_in_data(self):
         pass
     
-    def test_get_task_df(self):
+    def test_get_onehot_task_df(self):
         # check if the following raises a ValueErrror
-        self.assertRaises(ValueError, self.prodigy_reader.get_task_df, '42')
+        self.assertRaises(ValueError, self.prodigy_reader.get_onehot_task_df, '42')
         
         test_task = 'Study Type'
-        task_df = self.prodigy_reader.get_task_df(test_task)
+        task_df = self.prodigy_reader.get_onehot_task_df(test_task)
         # check if the returned object is a DataFrame
         self.assertIsInstance(task_df, pd.DataFrame)
         
@@ -67,7 +70,7 @@ class TestCalculateOverallCohenKappa(unittest.TestCase):
             self.assertEqual(test_line[key].values[0], value)
         
         test_task2 = 'Condition'
-        task2_df = self.prodigy_reader.get_task_df(test_task2)
+        task2_df = self.prodigy_reader.get_onehot_task_df(test_task2)
         test_line2 = task2_df[task2_df['id'] == 7601]
         
         expected_test_column2 = {
@@ -93,11 +96,35 @@ class TestCalculateOverallCohenKappa(unittest.TestCase):
 
     def test_visualize_distribution(self):
         test_task = 'Study Type'
-        task_df = self.prodigy_reader.get_task_df(test_task)
         test_plot = os.path.join(self.relative_path, 'test_data/test_plot.png')
-        self.prodigy_reader.visualize_distribution(task_df, test_task, test_plot)
+        self.prodigy_reader.visualize_distribution(save_path=test_plot)
         # check if the file was created
         self.assertTrue(os.path.exists(test_plot))
+    
+    
+    def test_get_label_task_df(self):
+        # check if the following raises a ValueErrror
+        self.assertRaises(ValueError, self.prodigy_reader.get_label_task_df, '42')
+        
+        test_task = 'Study Purpose'
+        label_mapping, task_df = self.prodigy_reader.get_label_task_df(test_task)
+        # check if the returned object is a DataFrame
+        self.assertIsInstance(task_df, pd.DataFrame)
+        self.assertIsInstance(label_mapping, dict)
+        
+        # check validity of label_mapping
+        self.assertEqual(len(label_mapping), len(self.prodigy_reader.get_classification_tasks()[test_task]))
+        self.assertTrue(all(isinstance(key, int) for key in label_mapping.keys()))
+        
+        # check some values in task_df
+        test_line = task_df[task_df['id'] == 8868]
+        expected = [0, 2, 3]
+        self.assertListEqual(test_line[test_task].values.tolist()[0], expected)
+        
+        test_line = task_df[task_df['id'] == 8909]
+        excepted = [3]
+        self.assertListEqual(test_line[test_task].values.tolist()[0], excepted)
+    
     
 if __name__ == '__main__':
     unittest.main()

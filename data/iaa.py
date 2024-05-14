@@ -3,6 +3,8 @@ import itertools
 import pandas as pd
 from sklearn.metrics import cohen_kappa_score, confusion_matrix, ConfusionMatrixDisplay
 
+from prodigy_data_reader import ProdigyIAAHelper
+
 
 def calculate_cohen_kappa_from_cfm(confusion: np.ndarray) -> float:
     # COPIED FROM SKLEARN METRICS
@@ -120,14 +122,9 @@ def calculate_overall_cohen_kappa_with_ci(df: pd.DataFrame,  annotators: list) -
 
 
 def main():
-    # Sample DataFrame
-    data = {
-    'annotations_array_numeric_max': ['[1, 2]', '[2, 3]', '[1, 2, 3]'],
-    'annotations_array_numeric_moritz': ['[1, 2]', '[2, 2]', '[1, 2, 4]']
-    }
-    df = pd.DataFrame(data)
-    annotators = ['max', 'moritz']
-    calculate_overall_cohen_kappa_with_ci(df, annotators)
+    files = ['/home/vera/Documents/Arbeit/CRS/PsychNER/data/prodigy_exports/prodigy_export_pia_50_20240418_20240509_110412.jsonl', '/home/vera/Documents/Arbeit/CRS/PsychNER/data/prodigy_exports/prodigy_export_ben_50_20240418_20240501_181325.jsonl']
+    
+    prodigy_aai = ProdigyIAAHelper(files)
 
 if __name__ == '__main__':
     
