@@ -98,8 +98,8 @@ def add_options_and_highlights(
     options = [
         {"text": lab, "style": {"background-color": c}} for i, (lab, c) in enumerate(zip(flat_labels, colors))
     ]
-    # for score, eg in matcher(stream):
-    for eg in stream:
+    
+    for score, eg in matcher(stream):
         current_annotation = eg['annotation']
         filtered_options = filter_options(options, labels[current_annotation])
         task = copy.deepcopy(eg)
