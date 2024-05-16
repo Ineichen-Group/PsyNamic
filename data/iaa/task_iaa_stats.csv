@@ -1,0 +1,18 @@
+Task,Agreement Measure,Value,Confidence Interval Boundary,Quality
+Study Type,Avg Pairwise Cohen's Kappa,0.743971800805038,0.14419890890125828,substantial
+Study Purpose,Krippendorff's Alpha,0.5005458515283843,0.0,work required
+Study Control,Krippendorff's Alpha,0.5721256480634339,0.0,work required
+Data Type,Avg Pairwise Cohen's Kappa,0.5467674743757291,0.18421951378186352,work required
+Data Collection,Avg Pairwise Cohen's Kappa,0.5982452770420716,0.21215578055230552,work required
+Number of Participants,Avg Pairwise Cohen's Kappa,0.8240267114173768,0.11948971049344458,almost perfect
+Sex of Participants,Krippendorff's Alpha,0.767175572519084,0.0,acceptable
+Age of Participants,Krippendorff's Alpha,0.6483305308671632,0.0,work required
+Substances,Krippendorff's Alpha,0.6929878256138202,0.0,acceptable
+Application Form,Krippendorff's Alpha,0.8443348077577407,0.0,good
+Regimen,Krippendorff's Alpha,0.41782594629569725,0.0,work required
+Setting,Krippendorff's Alpha,0.7366806770419175,0.0,acceptable
+Substance Naivety,Krippendorff's Alpha,0.578085183836913,0.0,work required
+Condition,Krippendorff's Alpha,0.7613317584526798,0.0,acceptable
+Outcomes,Krippendorff's Alpha,0.3769317503482126,0.0,work required
+Clinical Trial Phase,Avg Pairwise Cohen's Kappa,0.3858405160672262,0.3085714245359556,work required
+Study Conclusion,Krippendorff's Alpha,0.3854984186482371,0.0,work required

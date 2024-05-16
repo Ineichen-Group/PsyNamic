@@ -71,3 +71,4 @@ review-token:
 	docker compose exec psych sh -c "prodigy db-in bernard_review ./input/prodigy_export_bernard_50_20240418_20240516_091455_pattern_removed.jsonl"
 	docker compose exec psych sh -c "prodigy db-in julia_review ./input/prodigy_export_julia_50_20240418_20240516_133214_pattern_removed.jsonl"
 	docker compose exec -d psych sh -c "prodigy review review_all_token ben_review,pia_review,bernard_review,julia_review --view-id ner_manual --label \"Application area\",\"Dosage\""
+

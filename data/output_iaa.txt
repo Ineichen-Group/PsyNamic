@@ -1,0 +1,74 @@
+Agreed rejected: {5936, 49}
+Not agreed rejected: {6361}
+Sanity checks passed
+Calculating Cohen's kappa for task: Study Type
+Backend TkAgg is interactive backend. Turning interactive mode on.
+p_o = 0.7872340425531915, p_e = 0.1751923947487551, lower=0.60, kappa = 0.74, upper=0.88, boundary = 0.142
+standard error = 0.072
+lower confidence interval = 0.600
+upper confidence interval = 0.884
+Kappa: 0.7420417124039517, CI boundary: 0.14185919456445717
+Calculating Cohen's kappa for task: Study Purpose
+Task Study Purpose is a multi-label task. Cohen's kappa is not defined for multi-label tasks
+Calculating Cohen's kappa for task: Study Control
+Task Study Control is a multi-label task. Cohen's kappa is not defined for multi-label tasks
+Calculating Cohen's kappa for task: Data Type
+p_o = 0.6595744680851063, p_e = 0.2458125848800362, lower=0.37, kappa = 0.55, upper=0.73, boundary = 0.180
+standard error = 0.092
+lower confidence interval = 0.369
+upper confidence interval = 0.728
+Kappa: 0.5486194477791115, CI boundary: 0.17962667937875118
+Calculating Cohen's kappa for task: Data Collection
+p_o = 0.9574468085106383, p_e = 0.5631507469443187, lower=0.77, kappa = 0.90, upper=1.03, boundary = 0.132
+standard error = 0.067
+lower confidence interval = 0.770
+upper confidence interval = 1.035
+Kappa: 0.9025906735751297, CI boundary: 0.13209882106262308
+Calculating Cohen's kappa for task: Number of Participants
+p_o = 0.9148936170212765, p_e = 0.1561792666364871, lower=0.80, kappa = 0.90, upper=0.99, boundary = 0.095
+standard error = 0.048
+lower confidence interval = 0.805
+upper confidence interval = 0.994
+Kappa: 0.8991416309012874, CI boundary: 0.09454168007351611
+Calculating Cohen's kappa for task: Sex of Participants
+p_o = 0.9574468085106383, p_e = 0.5749207786328655, lower=0.76, kappa = 0.90, upper=1.04, boundary = 0.136
+standard error = 0.069
+lower confidence interval = 0.764
+upper confidence interval = 1.036
+Kappa: 0.8998935037273696, CI boundary: 0.13575650939875533
+Calculating Cohen's kappa for task: Age of Participants
+Task Age of Participants is a multi-label task. Cohen's kappa is not defined for multi-label tasks
+Calculating Cohen's kappa for task: Substances
+Task Substances is a multi-label task. Cohen's kappa is not defined for multi-label tasks
+Calculating Cohen's kappa for task: Application Form
+p_o = 0.9361702127659575, p_e = 0.2842915346310548, lower=0.81, kappa = 0.91, upper=1.01, boundary = 0.098
+standard error = 0.050
+lower confidence interval = 0.813
+upper confidence interval = 1.008
+Kappa: 0.9108159392789374, CI boundary: 0.09764726777566053
+Calculating Cohen's kappa for task: Regimen
+Task Regimen is a multi-label task. Cohen's kappa is not defined for multi-label tasks
+Calculating Cohen's kappa for task: Setting
+p_o = 0.8297872340425533, p_e = 0.43141693073789045, lower=0.51, kappa = 0.70, upper=0.89, boundary = 0.189
+standard error = 0.096
+lower confidence interval = 0.512
+upper confidence interval = 0.890
+Kappa: 0.7006369426751594, CI boundary: 0.18896991074084318
+Calculating Cohen's kappa for task: Substance Naivety
+Task Substance Naivety is a multi-label task. Cohen's kappa is not defined for multi-label tasks
+Calculating Cohen's kappa for task: Condition
+Task Condition is a multi-label task. Cohen's kappa is not defined for multi-label tasks
+Calculating Cohen's kappa for task: Outcomes
+Task Outcomes is a multi-label task. Cohen's kappa is not defined for multi-label tasks
+Calculating Cohen's kappa for task: Clinical Trial Phase
+p_o = 0.7659574468085106, p_e = 0.6025350837483024, lower=0.11, kappa = 0.41, upper=0.72, boundary = 0.305
+standard error = 0.155
+lower confidence interval = 0.107
+upper confidence interval = 0.716
+Kappa: 0.4111617312072892, CI boundary: 0.3045496308214314
+Calculating Cohen's kappa for task: Study Conclusion
+p_o = 0.8723404255319149, p_e = 0.597555454956994, lower=0.45, kappa = 0.68, upper=0.92, boundary = 0.237
+standard error = 0.121
+lower confidence interval = 0.446
+upper confidence interval = 0.920
+Kappa: 0.6827896512935885, CI boundary: 0.23706683024279032
