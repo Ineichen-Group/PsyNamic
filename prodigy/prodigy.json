@@ -1,6 +1,10 @@
 {
     "custom_theme": {
       "cardMaxWidth": 1300,
-      "bgMeta": "#fff7d1"
+      "bgMeta": "#fff7d1",
+      "labels": {
+        "DOSAGE" : "#33BAFF",
+        "APPLICATION AREA": "#DAF7A6"
+      }
     }
   }
