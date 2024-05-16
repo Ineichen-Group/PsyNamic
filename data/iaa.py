@@ -3,11 +3,12 @@ import itertools
 import pandas as pd
 from sklearn.metrics import cohen_kappa_score, confusion_matrix, ConfusionMatrixDisplay
 
-from prodigy_data_reader import ProdigyIAAHelper
+
+# copied from NeuroTrialNER, performance_evluation.py on 14.05.2024
 
 
-def calculate_cohen_kappa_from_cfm(confusion: np.ndarray) -> float:
-    # COPIED FROM SKLEARN METRICS
+def calculate_cohen_kappa_from_cfm(confusion):
+    # SOURCE FROM SKLEARN METRICS
     n_classes = confusion.shape[0]
     sum0 = np.sum(confusion, axis=0)
     sum1 = np.sum(confusion, axis=1)
@@ -20,7 +21,7 @@ def calculate_cohen_kappa_from_cfm(confusion: np.ndarray) -> float:
     return 1 - k
 
 
-def calculate_cohen_kappa_from_cfm_per_class(confusion: np.ndarray, labels: list) -> list:
+def calculate_cohen_kappa_from_cfm_per_class(confusion, labels):
     n_classes = confusion.shape[0]
 
     # Calculate kappa score for each class
@@ -44,7 +45,7 @@ def calculate_cohen_kappa_from_cfm_per_class(confusion: np.ndarray, labels: list
     return kappa_per_class
 
 
-def calculate_cohen_kappa_from_cfm_with_ci(confusion: np.ndarray, print_result: bool = False) -> tuple:
+def calculate_cohen_kappa_from_cfm_with_ci(confusion: np.ndarray, print_result: bool = False) -> tuple[float, float]:
     # COPIED FROM SKLEARN METRICS
     # Sample size
     n = np.sum(confusion)
@@ -115,18 +116,15 @@ def calculate_overall_cohen_kappa_with_ci(df: pd.DataFrame,  annotators: list) -
             [eval(row) for row in annotations2]).tolist()
 
         confusion = confusion_matrix(combined_array_1, combined_array_2)
-        print(confusion)
         print(
             f"Cohen-Kappa with Confidence intervals {annotator1} vs {annotator2}")
         calculate_cohen_kappa_from_cfm_with_ci(confusion, print_result=True)
 
 
 def main():
-    files = ['/home/vera/Documents/Arbeit/CRS/PsychNER/data/prodigy_exports/prodigy_export_pia_50_20240418_20240509_110412.jsonl', '/home/vera/Documents/Arbeit/CRS/PsychNER/data/prodigy_exports/prodigy_export_ben_50_20240418_20240501_181325.jsonl']
-    
-    prodigy_aai = ProdigyIAAHelper(files)
+   pass
+
 
 if __name__ == '__main__':
-    
-    
+
     main()

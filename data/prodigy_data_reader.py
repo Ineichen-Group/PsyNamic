@@ -1,10 +1,14 @@
 import json
-import pandas as pd
-from collections import defaultdict
-import seaborn as sns
-import matplotlib.pyplot as plt
-from typing import Union
 import os
+from collections import defaultdict
+from typing import Union
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from iaa import calculate_cohen_kappa_from_cfm_with_ci
+from itertools import combinations
 
 # Below has to be adjusted given prodigy iteration
 FIXED_COLUMNS = ['id', 'text']
@@ -20,8 +24,15 @@ class ProdigyDataReader:
 
         self.prodigy_id_to_label = self.get_prodigy_label_map()
         self.df = self._initiate_df()
+        self.rejected = []
         
         self._read_all()
+        
+    def __len__(self):
+        return len(self.df)
+    
+    def __getitem__(self, id: str):
+        return self.df[self.df['id'] == id]
 
     def get_prodigy_label_map(self) -> dict:
         if not self.id_to_class_label:
@@ -54,37 +65,6 @@ class ProdigyDataReader:
 
         return self.tasks
 
-    def _encode_class_labels(self) -> None:
-        pass
-
-    def _initiate_df(self) -> pd.DataFrame:
-        class_labels = ['id', 'text']
-        class_labels += list(self.prodigy_id_to_label.values())
-        return pd.DataFrame(columns=class_labels)
-
-    def _read_all(self) -> None:
-        all_rows = []
-        with open(self.jsonl_path, 'r', encoding='utf-8') as infile:
-            for line in infile:
-                data = json.loads(line)
-                new_row = self._new_empty_row()
-                # get class labels:
-                class_ids = data['accept']
-                new_row['text'] = data['text']
-                new_row['id'] = data['record_id']
-                for class_id in class_ids:
-                    # set the class label to 1
-                    class_label = self.prodigy_id_to_label[class_id]
-                    new_row[class_label] = 1
-                all_rows.append(new_row)
-        self.df = pd.concat([self.df, pd.DataFrame(all_rows)])
-        # reorder rows according to the id
-        self.df = self.df.sort_values(by='id')
-
-    def _new_empty_row(self) -> dict:
-        column_names = list(self.df.columns)
-        return {col: 0 for col in column_names}
-
     def export_to_csv(self, out_path: str) -> None:
         # check if path exists
         dir = os.path.dirname(out_path)
@@ -111,7 +91,6 @@ class ProdigyDataReader:
         if self._is_valid_task(task_name):
             int_to_label = {index: label for index, label in enumerate(self.tasks[task_name])}
             label_to_int = {label: index for index, label in enumerate(self.tasks[task_name])}
-            print(label_to_int)
             task_filtered = {}
             # add fixed columns
             for fixed_col in FIXED_COLUMNS:
@@ -160,6 +139,14 @@ class ProdigyDataReader:
         else:
             plt.show()
     
+    def _is_task_multi_label(self, task_name: str) -> bool:
+        if self._is_valid_task(task_name):
+            _, df = self.get_label_task_df(task_name)
+            for _, row in df.iterrows():
+                if len(row[task_name]) > 1:
+                    return True
+            return False
+    
     def _plot_task_distribution(self, task:str, ax=None):
         df = self.get_onehot_task_df(task)
         
@@ -200,25 +187,79 @@ class ProdigyDataReader:
         else:
             return True
 
+    def _initiate_df(self) -> pd.DataFrame:
+        class_labels = ['id', 'text']
+        class_labels += list(self.prodigy_id_to_label.values())
+        return pd.DataFrame(columns=class_labels)
+
+    def _read_all(self) -> None:
+        all_rows = []
+        with open(self.jsonl_path, 'r', encoding='utf-8') as infile:
+            for line in infile:
+                data = json.loads(line)
+                new_row = self._new_empty_row()
+                # get class labels:
+                class_ids = data['accept']
+                new_row['text'] = data['text']
+                new_row['id'] = data['record_id']
+                if not class_ids and data['answer'] == 'reject':
+                    self.rejected.append(data['record_id'])
+                else:
+                    for class_id in class_ids:
+                        # set the class label to 1
+                        class_label = self.prodigy_id_to_label[class_id]
+                        new_row[class_label] = 1
+                    all_rows.append(new_row)
+        self.df = pd.concat([self.df, pd.DataFrame(all_rows)])
+        # reorder rows according to the id
+        self.df = self.df.sort_values(by='id')
+
+    def _new_empty_row(self) -> dict:
+        column_names = list(self.df.columns)
+        return {col: 0 for col in column_names}
+    
 class ProdigyIAAHelper():
-    def __init__(self, list_of_files: list[str]) -> None:
+    def __init__(self, list_of_files: list[str], names: list[str]=None) -> None:
         self.prodigy_files = list_of_files
         self.prodigy_readers = []
+        self.names = names
         for file in list_of_files:
-            self.prodigy_readers.append(ProdigyDataReader(file))
-            
+            prodigy_reader = ProdigyDataReader(file)
+            self.prodigy_readers.append(prodigy_reader)
+        
+        self.tasks = {}
         # sanity checks
+        self._inspect_rejected()
         self._check_number_of_samples()
         self._check_order_of_samples()
         self._check_tasks()
-        print('All checks passed')
+        print('Sanity checks passed')
+    
+    def _inspect_rejected(self) -> None:
+        rejected = []
+        for reader in self.prodigy_readers:
+            rejected.append(reader.rejected)
+        
+        sets_rejected = [set(rej) for rej in rejected]
+        
+        agreed_rejected = sets_rejected[0].intersection(*sets_rejected[1:])
+        not_agreed_rejected = sets_rejected[0].union(*sets_rejected[1:]) - agreed_rejected
+        all_rejected = agreed_rejected.union(not_agreed_rejected)
+        
+        print(f'Agreed rejected: {agreed_rejected}')
+        print(f'Not agreed rejected: {not_agreed_rejected}')
+        
+        # remove agreed and not agreed rejected
+        for reader in self.prodigy_readers:
+            reader.df = reader.df[~reader.df['id'].isin(all_rejected)]
     
     def _check_number_of_samples(self) -> None:
         # check if all files have the same number of samples
         num_samples_first = len(self.prodigy_readers[0].df)
         for reader in self.prodigy_readers[1:]:
             num_samples = len(reader.df)
-            if num_samples != num_samples_first:
+            if num_samples != num_samples_first:             
+                
                 # raise value error the unmatching number and name of data reader
                 raise ValueError(f'Number of samples is not the same in {reader.jsonl_path} and {self.prodigy_readers[0].jsonl_path}\n{num_samples} vs {num_samples_first} samples' )
             
@@ -238,12 +279,94 @@ class ProdigyIAAHelper():
         for reader in self.prodigy_readers[1:]:
             tasks = reader.get_classification_tasks()
             if tasks != tasks_first:
-                raise ValueError(f'Tasks are not the same in {reader.jsonl_path} and {self.prodigy_readers[0].jsonl_path}')        
+                raise ValueError(f'Tasks are not the same in {reader.jsonl_path} and {self.prodigy_readers[0].jsonl_path}')
+        self.tasks = tasks_first        
     
-    def cohen_kappa_per_task(self, task):
+    def cohen_kappa_per_task(self, task, readers=None) -> tuple[float, float]:
+        if self._is_valid_task(task):
+            # TODO: refine so that task specific table is not created twice
+            if self._task_is_multi_label(task):
+                raise ValueError(f'Task {task} is a multi-label task. Cohen\'s kappa is not defined for multi-label tasks')
+            else:
+                readers = self.prodigy_readers if readers is None else readers
+                if len(readers) == 2:
+                    int_to_label, reader1_task_df = readers[0].get_label_task_df(task)
+                    int_to_label, reader2_task_df = readers[1].get_label_task_df(task)
+
+                    # flatten the pandas series
+                    reader1_task_list = reader1_task_df[task].apply(lambda x: x[0] if x else None)
+                    reader2_task_list = reader2_task_df[task].apply(lambda x: x[0] if x else None)
+                    # replace None with -1
+                    reader1_task_list.fillna(-1, inplace=True)
+                    reader2_task_list.fillna(-1, inplace=True)
+                    # add -1 to int_to_label
+                    int_to_label[-1] = 'None'
+                    
+                    
+                    cm = confusion_matrix(reader1_task_list, reader2_task_list, labels=list(int_to_label.keys()))
+                    dist = ConfusionMatrixDisplay(cm, display_labels=int_to_label.values())
+                    # turn x axis labels by 45 degrees
+                    dist.plot(xticks_rotation='vertical')
+                    
+                    return calculate_cohen_kappa_from_cfm_with_ci(cm)
+                else:
+                    # get all possible combinations of annotators
+                    pair_list = list(combinations(self.prodigy_readers, 2))
+                    average_kappa = 0
+                    average_boundary_limits = 0
+                    
+                    for c in pair_list:
+                        kappa, boundary_limits = self.cohen_kappa_per_task(task, c)
+                        average_kappa += kappa
+                        average_boundary_limits += boundary_limits
+                        
+                    average_kappa /= len(pair_list)
+                    average_boundary_limits /= len(pair_list)
+                    
+                    return average_kappa, average_boundary_limits                       
+                
+    def cohen_kappa_all_tasks(self):
+        for task in self.tasks.keys():
+            print(f'Calculating Cohen\'s kappa for task: {task}')
+            try:
+                kappa, ci_boundary = self.cohen_kappa_per_task(task)
+                print(f'Kappa: {kappa}, CI boundary: {ci_boundary}')
+            except ValueError as e:
+                print(e)                   
+                
+    def _is_valid_task(self, task_name: str) -> Union[bool, None]:
+        if not task_name in self.tasks.keys():
+            raise ValueError(f'Invalid task name, options are ´{self.get_classification_tasks().keys()}´')
+        else:
+            return True
+    
+    def _task_is_multi_label(self, task_name: str) -> bool:
+        multilabel = False
         for reader in self.prodigy_readers:
-            task = reader.get_label_task_df(task)
-        
+            if reader._is_task_multi_label(task_name):
+                multilabel = True
+                break
+        return multilabel
+
+
+def calculate_agreement():
+    files = [
+        '/home/vera/Documents/Arbeit/CRS/PsychNER/data/prodigy_exports/prodigy_export_ben_50_20240418_20240501_181325.jsonl',
+        '/home/vera/Documents/Arbeit/CRS/PsychNER/data/prodigy_exports/prodigy_export_pia_50_20240418_20240509_110412.jsonl',
+        '/home/vera/Documents/Arbeit/CRS/PsychNER/data/prodigy_exports/prodigy_export_bernard_50_20240418_20240516_091455.jsonl',]
+
+    names = ['ben', 'pia', 'bernard']
+
+    prodigy_aai = ProdigyIAAHelper(files, names)
     
+    prodigy_aai.prodigy_readers[0].export_to_csv('data/annotated_data/prodigy_export_50_20240418/50_ben_flat.csv')
+    prodigy_aai.prodigy_readers[1].export_to_csv('data/annotated_data/prodigy_export_50_20240418/50_pia_flat.csv')
+    
+    prodigy_aai.cohen_kappa_all_tasks()
+
+def main():
+    calculate_agreement()
+
 if __name__ == '__main__':
-    pass
+    calculate_agreement()
+    
