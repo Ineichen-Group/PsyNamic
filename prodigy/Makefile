@@ -38,8 +38,12 @@ start-pia:
 stop:
 	docker compose down
 
+# db-export: start
+# 		docker compose exec psych sh -c "prodigy db-out pubmed_psych > /export/prodigy_export_$$(date +%Y%m%d_%H%M%S).jsonl"
+
 db-export: start
-		docker compose exec psych sh -c "prodigy db-out pubmed_psych > /export/prodigy_export_$$(date +%Y%m%d_%H%M%S).jsonl"
+	docker compose exec psych sh -c "prodigy db-out review_all_text > /export/prodigy_export_review_all_text_$(shell date +%Y%m%d_%H%M%S).jsonl"
+	docker compose exec psych sh -c "prodigy db-out review_all_token > /export/prodigy_export_review_all_token_$(shell date +%Y%m%d_%H%M%S).jsonl"
 
 db-reset: stop
 	rm -r ./prodigy_data/*
@@ -49,3 +53,21 @@ logs:
 
 shell:
 	docker compose exec psych bash
+
+review-text: 
+	docker compose down
+	docker compose up -d
+	docker compose exec psych sh -c "prodigy db-in ben_review ./input/prodigy_export_ben_50_20240418_20240501_181325_pattern_removed.jsonl"
+	docker compose exec psych sh -c "prodigy db-in pia_review ./input/prodigy_export_pia_50_20240418_20240509_110412_pattern_removed.jsonl"
+	docker compose exec psych sh -c "prodigy db-in bernard_review ./input/prodigy_export_bernard_50_20240418_20240516_091455_pattern_removed.jsonl"
+	docker compose exec psych sh -c "prodigy db-in julia_review ./input/prodigy_export_julia_50_20240418_20240516_133214_pattern_removed.jsonl"
+	docker compose exec -d psych sh -c "prodigy review review_all_text ben_review,pia_review,bernard_review,julia_review --view-id choice"
+
+review-token:
+	docker compose down
+	docker compose up -d
+	docker compose exec psych sh -c "prodigy db-in ben_review ./input/prodigy_export_ben_50_20240418_20240501_181325_pattern_removed.jsonl"
+	docker compose exec psych sh -c "prodigy db-in pia_review ./input/prodigy_export_pia_50_20240418_20240509_110412_pattern_removed.jsonl"
+	docker compose exec psych sh -c "prodigy db-in bernard_review ./input/prodigy_export_bernard_50_20240418_20240516_091455_pattern_removed.jsonl"
+	docker compose exec psych sh -c "prodigy db-in julia_review ./input/prodigy_export_julia_50_20240418_20240516_133214_pattern_removed.jsonl"
+	docker compose exec -d psych sh -c "prodigy review review_all_token ben_review,pia_review,bernard_review,julia_review --view-id ner_manual --label \"Application area\",\"Dosage\""

@@ -3,8 +3,8 @@
       "cardMaxWidth": 1300,
       "bgMeta": "#fff7d1",
       "labels": {
-        "DOSAGE" : "#33BAFF",
-        "APPLICATION AREA": "#DAF7A6"
+        "Dosage" : "#33BAFF",
+        "Application area": "#DAF7A6"
       }
     }
   }
