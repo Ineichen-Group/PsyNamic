@@ -443,8 +443,26 @@ def calculate_agreement():
     prodigy_aai.agreement_all_tasks(csv_path='data/iaa/task_iaa_stats.csv')
 
 
+def calculate_pairwise_agreement():
+    files = [
+        '/home/vera/Documents/Arbeit/CRS/PsychNER/data/prodigy_exports/prodigy_export_ben_50_20240418_20240501_181325.jsonl',
+        '/home/vera/Documents/Arbeit/CRS/PsychNER/data/prodigy_exports/prodigy_export_pia_50_20240418_20240509_110412.jsonl',
+        '/home/vera/Documents/Arbeit/CRS/PsychNER/data/prodigy_exports/prodigy_export_bernard_50_20240418_20240516_091455.jsonl',
+        '/home/vera/Documents/Arbeit/CRS/PsychNER/data/prodigy_exports/prodigy_export_julia_50_20240418_20240516_133214.jsonl'
+        ]
+
+    names = ['ben', 'pia', 'bernard', 'julia']
+    
+    for file, name in zip(files[1:], names[1:]):
+        pairwise_file = [files[0], file]
+        pairwise_name = [names[0], name]
+        reader = ProdigyIAAHelper(pairwise_file, pairwise_name)
+        reader.agreement_all_tasks(csv_path=f'data/iaa/task_iaa_stats_{pairwise_name[0]}_{pairwise_name[1]}_23052024.csv')
+
+
 def main():
     calculate_agreement()
+    calculate_pairwise_agreement()
 
 
 if __name__ == '__main__':
