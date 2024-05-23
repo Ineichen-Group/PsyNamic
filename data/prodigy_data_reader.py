@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-from iaa import calculate_cohen_kappa_from_cfm_with_ci, calculate_krippendorff_alpha
+from iaa import calculate_krippendorff_alpha
+from stride_utils.iaa import calculate_cohen_kappa_from_cfm_with_ci
 from itertools import combinations
 
 # Below has to be adjusted given prodigy iteration
