@@ -107,14 +107,28 @@ def update_annotation_log(sample_file: str) -> None:
     log_df['data_set'] = log_df['data_set'].astype(str)
     log_df['data_set'] = log_df['data_set'].replace('nan', '')
     with open(sample_file, 'r') as infile:
+        doubled = []
         for line in infile:
             record_id = json.loads(line)['record_id']
             # set annotated to True and add sample file name
             sample_file_name = os.path.basename(sample_file)
-            log_df.loc[log_df['record_id'] == record_id,
-                       'data_set'] = sample_file_name
-            log_df.loc[log_df['record_id'] == record_id, 'annotated'] = True
-
+            
+            # check if record_id is already annotated
+            already_annotated = log_df.loc[log_df['record_id'] == record_id, 'annotated'].values[0]
+            dataset = log_df.loc[log_df['record_id'] == record_id, 'data_set'].values[0]
+            if already_annotated and dataset != sample_file_name:
+                print(f'{record_id} already annotated by {dataset}')
+                doubled.append(record_id)
+            else:
+                log_df.loc[log_df['record_id'] == record_id, 'data_set'] = sample_file_name
+                log_df.loc[log_df['record_id'] == record_id, 'annotated'] = True
+        # write doubled to file
+        if doubled:
+            doubled = set(doubled)
+            with open('doubled.txt', 'a') as f:
+                for record_id in doubled:
+                    f.write(str(record_id) + '\n')
+    
     current_date = datetime.now().strftime('%Y%m%d')
     new_log = f'annotation_log_{current_date}.csv'
     new_log_path = os.path.join(ANNOTATION_DIR, new_log)
@@ -206,13 +220,34 @@ def main():
     # update_annotation_log(subsample)
     # annotation_progress()
     
+    # subsample = generate_subsample(cleaned_data, 250)
+    # update_annotation_log(subsample)
+    # annotation_progress()
+    
+    # remove_from_annotation_log('psychedelic_study_250_20240425_134820.jsonl')
+    # remove_from_annotation_log('psychedelic_study_250_20240425_134821.jsonl')
+    # remove_from_annotation_log('psychedelic_study_250_20240425_134822.jsonl')
+    # remove_from_annotation_log('psychedelic_study_250_20240425_134823.jsonl')
+    # remove_from_annotation_log('psychedelic_study_40_20240523_162946.jsonl')
+    # remove_from_annotation_log('psychedelic_study_250_20240425_152801.jsonl')
+    
+    # update_annotation_log('prodigy_inputs/psychedelic_study_250_20240423_113435.jsonl')
+    # update_annotation_log('prodigy_inputs/psychedelic_study_250_20240423_113436.jsonl')
+    # update_annotation_log('prodigy_inputs/psychedelic_study_250_20240423_113437.jsonl')
+    # update_annotation_log('prodigy_inputs/psychedelic_study_95_20240423_113434.jsonl')
+    # update_annotation_log('prodigy_inputs/psychedelic_study_24_20240425_152801.jsonl')
+    # annotation_progress()
+    
+    subsample = generate_subsample(cleaned_data, 40)
+    update_annotation_log(subsample)
+    annotation_progress()
+    
     subsample = generate_subsample(cleaned_data, 250)
     update_annotation_log(subsample)
     annotation_progress()
 
-
-
     
+
 if __name__ == '__main__':
 
     main()
