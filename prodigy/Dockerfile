@@ -9,6 +9,11 @@ RUN apt-get update && \
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && \
 echo $TZ > /etc/timezone
 
+# Install sqlite3
+RUN apt-get update && \
+    apt-get install -y sqlite3 && \
+    apt-get clean
+
 # Install python dependencies
 COPY requirements.txt .
 RUN python -m pip install --upgrade pip && \
