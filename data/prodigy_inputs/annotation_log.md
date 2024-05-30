@@ -9,7 +9,7 @@
 
 ## Real Annotation
 
-| Prodigy Version | Dataset                                     | Size  | Annotator   | Status                   | Annotations Received    |
+| Prodigy Version | Dataset                                     | Size  | Status | Annotator(s)                   | Annotations Received    |
 | --------------- | ------------------------------------------- | ----- | ----------- | ------------------------ | ----------------------- |
 | V4              | psychedelic_study_50_20240418               | 50    | Done        | Ben, Pia, Julia, Bernard |
 | V4              | psychedelic_study_100_20240418              | 100   | Done        | Ben                      | x                       |
