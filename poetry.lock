@@ -967,7 +967,7 @@ files = [
 
 [[package]]
 name = "stride_utils"
-version = "0.0.0"
+version = "0.4.1"
 description = "Stride Lab Utils for Internal Use"
 optional = false
 python-versions = ">=3.7"
@@ -975,13 +975,16 @@ files = []
 develop = false
 
 [package.dependencies]
+nltk = "*"
 numpy = "*"
+pandas = "*"
+scipy = "*"
 
 [package.source]
 type = "git"
 url = "https://github.com/Ineichen-Group/stride_utils.git"
-reference = "v0.1.0"
-resolved_reference = "5ba48b702c253bcc9b74cffa7df3de8750774229"
+reference = "v0.4.1"
+resolved_reference = "04a37cfd72cd5cfea3460d7d340cb19d72e1c4bc"
 
 [[package]]
 name = "threadpoolctl"
@@ -1045,4 +1048,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "698437d66bc327f15462d969d62282636a8d5e386b3a2b0d0f5b911d45efdaa8"
+content-hash = "b2ae4b0642194cbc595f07a3a9993c9c0bbc7c1c4e8d9f06fc034419660e5c59"

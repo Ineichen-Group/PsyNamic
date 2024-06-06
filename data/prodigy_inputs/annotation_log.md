@@ -9,7 +9,7 @@
 
 ## Real Annotation
 
-| Prodigy Version | Dataset                                     | Size  | Status | Annotator(s)                   | Annotations Received    |
+| Prodigy Version | Dataset                                     | Size  | Status      | Annotator(s)             | Annotations Received    |
 | --------------- | ------------------------------------------- | ----- | ----------- | ------------------------ | ----------------------- |
 | V4              | psychedelic_study_50_20240418               | 50    | Done        | Ben, Pia, Julia, Bernard |
 | V4              | psychedelic_study_100_20240418              | 100   | Done        | Ben                      | x                       |
@@ -22,7 +22,7 @@
 | V6 / Review     | psychedelic_study_24_20240425_152801.jsonl  | 24    | Done        | Ben                      | x -> 11 samples doubled |
 | -----------     | -----------                                 | ----- | ----------- | -----------              | -----------             |
 | V7              | psychedelic_study_250_20240523_195806.jsonl | 250   | In Progress | Ben                      |                         |
-| V7              | psychedelic_study_40_20240523_195805.jsonl  | 40    | In Progress | Pia, Ben                 |                         |
+| V7              | psychedelic_study_40_20240523_195805.jsonl  | 40    | In Progress | Pia, Ben                 | x                       |
 
 Current Total annotated: 1108
 
