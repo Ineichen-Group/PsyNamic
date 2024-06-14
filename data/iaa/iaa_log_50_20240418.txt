@@ -1,0 +1,9 @@
+Log file for IAA calculations
+Created at 2024-06-14 19:33:21
+Datafiles used:
+data/prodigy_exports/prodigy_export_ben_50_20240418_20240501_181325.jsonl (ben)
+data/prodigy_exports/prodigy_export_pia_50_20240418_20240509_110412.jsonl (pia)
+data/prodigy_exports/prodigy_export_bernard_50_20240418_20240516_091455.jsonl (bernard)
+data/prodigy_exports/prodigy_export_julia_50_20240418_20240516_133214.jsonl (julia)
+Agreed rejected: {49}
+Not agreed rejected: {5936, 6361, 8470}

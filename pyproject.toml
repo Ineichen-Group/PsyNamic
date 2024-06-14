@@ -13,7 +13,7 @@ requests = "^2.31.0"
 scikit-learn = "^1.4.2"
 seaborn = "^0.13.2"
 nltk = "^3.8.1"
-stride-utils = {git = "https://github.com/Ineichen-Group/stride_utils.git", rev = "v0.4.1"}
+stride-utils = {git = "https://github.com/Ineichen-Group/stride_utils.git", rev = "v0.5.1"}
 [tool.poetry.group.dev.dependencies]
 pandas = "^2.2.2"
 

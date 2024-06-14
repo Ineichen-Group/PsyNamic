@@ -1,23 +1,23 @@
 from prodigy_data_reader import ProdigyIAAHelper
 
 
-def calculate_agreement(files: list[str], names: list[str], thematic: bool = True, data_set_name: str=''):
+def calculate_agreement(files: list[str], names: list[str], thematic: bool = True, data_set_name: str='', save: bool = True):
     log_file = f'data/iaa/iaa_log_{data_set_name}.txt'
     prodigy_aai = ProdigyIAAHelper(
-        files, names, log_file, thematic_split=thematic)
+        files, names, log_file, thematic_split=thematic,)
     prodigy_aai.agreement_all_tasks(
-        csv_path=f'data/iaa/task_iaa_stats_{data_set_name}.csv')
+        csv_path=f'data/iaa/task_iaa_stats_{data_set_name}.csv', save=save)
 
-
-def calculate_pairwise_agreement(files: list[str], names: list[str], thematic: bool = True, data_set_name: str=''):
-    for file, name in zip(files[1:], names[1:]):
-        pairwise_file = [files[0], file]
-        pairwise_name = [names[0], name]
-        log_file = f'data/iaa/iaa_log_{pairwise_name[0]}_{pairwise_name[1]}_{data_set_name}.txt'
-        reader = ProdigyIAAHelper(
-            pairwise_file, pairwise_name, thematic_split=thematic, log_file=log_file)
-        reader.agreement_all_tasks(
-            csv_path=f'data/iaa/task_iaa_stats_{pairwise_name[0]}_{pairwise_name[1]}_{data_set_name}.csv')
+# TODO: Fix pairwise agreement calculation
+# def calculate_pairwise_agreement(files: list[str], names: list[str], thematic: bool = True, data_set_name: str=''):
+#     for file, name in zip(files[1:], names[1:]):
+#         pairwise_file = [files[0], file]
+#         pairwise_name = [names[0], name]
+#         log_file = f'data/iaa/iaa_log_{pairwise_name[0]}_{pairwise_name[1]}_{data_set_name}.txt'
+#         reader = ProdigyIAAHelper(
+#             pairwise_file, pairwise_name, thematic_split=thematic, log=log_file)
+#         reader.agreement_all_tasks(
+#             csv_path=f'data/iaa/task_iaa_stats_{pairwise_name[0]}_{pairwise_name[1]}_{data_set_name}.csv', save=True)
 
 
 def first_round_iaa():
@@ -29,8 +29,8 @@ def first_round_iaa():
         'data/prodigy_exports/prodigy_export_julia_50_20240418_20240516_133214.jsonl'
     ]
     names = ['ben', 'pia', 'bernard', 'julia']
-    calculate_agreement(files, names, thematic=False, data_set_name='50_20240418')
-    calculate_pairwise_agreement(files, names, thematic=False, data_set_name='50_20240418')
+    # calculate_agreement(files, names, thematic=False, data_set_name='50_20240418')
+    # calculate_pairwise_agreement(files, names, thematic=False, data_set_name='50_20240418')
 
 
 def second_round_iaa():
@@ -45,7 +45,7 @@ def second_round_iaa():
 
 
 def main():
-    # first_round_iaa()
+    first_round_iaa()
     second_round_iaa()
 
 

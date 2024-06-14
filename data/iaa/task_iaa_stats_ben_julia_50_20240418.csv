@@ -1,0 +1,18 @@
+Task,Agreement Measure,Value,Confidence Interval Boundary,Quality
+Study Type,Cohen's Kappa,0.784632641615255,0.1362386514156642,Moderate Agreement
+Study Purpose,Krippendorff's Alpha,0.5325953259532595,0.23125248682243837,Poor Agreement -> WORK REQUIRED
+Study Control,Cohen's Kappa,0.6442417331812998,0.165140197380825,Moderate Agreement
+Data Type,Cohen's Kappa,0.6973518284993694,0.16690344671688725,Moderate Agreement
+Data Collection,Cohen's Kappa,0.5822454308093996,0.2303819551723091,Weak Agreement -> WORK REQUIRED
+Number of Participants,Cohen's Kappa,0.8773006134969327,0.10179514598949922,Strong Agreement
+Sex of Participants,Cohen's Kappa,0.8074222668004014,0.18069155927325226,Strong Agreement
+Age of Participants,Krippendorff's Alpha,0.851213782302271,0.2380987394957984,Substantial Agreement
+Substances,Krippendorff's Alpha,0.8326623049823855,0.1359691050461933,Substantial Agreement
+Application Form,Cohen's Kappa,0.9114391143911439,0.09703379858080269,Almost Perfect Agreement
+Regimen,Krippendorff's Alpha,0.46327683615819215,0.26441749603457687,Poor Agreement -> WORK REQUIRED
+Setting,Cohen's Kappa,0.800995024875622,0.16510058503769526,Strong Agreement
+Substance Naivety,Krippendorff's Alpha,0.6685564762320105,0.27673477275638925,Poor Agreement -> WORK REQUIRED
+Condition,Krippendorff's Alpha,0.7164948453608248,0.18074634671953305,Moderate Agreement
+Outcomes,Krippendorff's Alpha,0.440460947503201,0.2465915546713714,Poor Agreement -> WORK REQUIRED
+Clinical Trial Phase,Cohen's Kappa,0.26455566905005123,0.3086004803372868,Minimal Agreement -> WORK REQUIRED
+Study Conclusion,Cohen's Kappa,0.5492957746478874,0.285109759946161,Weak Agreement -> WORK REQUIRED

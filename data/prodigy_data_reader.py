@@ -5,6 +5,7 @@ from datetime import datetime
 from itertools import combinations
 from typing import Union
 import numpy as np
+from matplotlib.figure import Figure
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -12,6 +13,7 @@ import seaborn as sns
 from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix, multilabel_confusion_matrix
 from stride_utils.iaa import (calculate_cohen_kappa_from_cfm_with_ci,
                               calculate_krippendorff_alpha_with_ci,
+                              calculate_percentage_agreement,
                               interpret_alpha, interpret_kappa)
 from sklearn.preprocessing import MultiLabelBinarizer
 # Below has to be adjusted given prodigy iteration
@@ -175,7 +177,7 @@ class ProdigyDataReader:
             num_tasks = len(classification_tasks)
             num_rows = num_tasks // 2 + num_tasks % 2  # 2 columns, variable number of rows
             fig, axes = plt.subplots(
-                nrows=num_rows, ncols=2, figsize=(12, 6 * num_rows))
+                nrows=num_rows, ncols=2, figsize=(12, 4 * num_rows))
             axes = axes.flatten()  # Flatten axes if more than 1 row
 
             for idx, task in enumerate(classification_tasks):
@@ -366,6 +368,8 @@ class ProdigyIAAHelper():
 
         self._inital_log()
         self.tasks = {}
+        self.iaa_dir = None
+        self.iaa_file = None
         # sanity checks
         self._inspect_rejected()
         self._check_number_of_samples()
@@ -456,72 +460,145 @@ class ProdigyIAAHelper():
                 reader_task_df_list, ignore_index=True)
             return int_to_label_list[0], concat_task_df
 
-    def agreement_per_task(self, task: str, readers: list[ProdigyDataReader] = None) -> tuple[str, float, float]:
+    def agreement_per_task(self, task: str, readers: list[ProdigyDataReader] = None, save: bool = False, measures: list[str] = None) -> dict[str, Union[float, str]]:
+        iaa_dict = {meas: None for meas in measures}
+
         if self._is_valid_task(task):
-            # TODO: refine so that task specific table is not created twice
-            if self._task_is_multi_label(task):
-                int_to_label, task_df = self.get_task_df(task)
+            int_to_label, task_df = self.get_task_df(task)
+            readers = self.prodigy_readers if readers is None else readers
+            if 'Krippendorff' in measures:
+              
                 alpha, low, high = calculate_krippendorff_alpha_with_ci(
                     task_df, 'id', 'reader', task)
                 confidence_interval = high - low
-                return "Krippendorff's Alpha", alpha, confidence_interval
-            else:
-                readers = self.prodigy_readers if readers is None else readers
+
+                # if only two annotators, plot confusion matrix
                 if len(readers) == 2:
-                    int_to_label, reader1_task_df = readers[0].get_label_task_df(
-                        task)
-                    int_to_label, reader2_task_df = readers[1].get_label_task_df(
-                        task)
-                    # TODO: unduplicate code
-                    # flatten the pandas series
-                    reader1_task_list = reader1_task_df[task].apply(
-                        lambda x: x[0] if x else None)
-                    reader2_task_list = reader2_task_df[task].apply(
-                        lambda x: x[0] if x else None)
-                    # replace None with -1
-                    reader1_task_list.fillna(-1, inplace=True)
-                    reader2_task_list.fillna(-1, inplace=True)
-                    # add -1 to int_to_label
-                    int_to_label[-1] = 'None'
+                    labels = list(int_to_label.keys())
+                    first_pred = task_df[task_df['reader'] == self.names[0]].sort_values(by='id')[
+                        task]
+                    second_pred = task_df[task_df['reader'] == self.names[1]].sort_values(by='id')[
+                        task]
+                    first_pred_matrix = MultiLabelBinarizer(
+                        classes=labels).fit_transform(first_pred.to_numpy())
+                    second_pred_matrix = MultiLabelBinarizer(
+                        classes=labels).fit_transform(second_pred.to_numpy())
+                    cm = multilabel_confusion_matrix(
+                        first_pred_matrix, second_pred_matrix, labels=labels)
+                    iaa_str = f'Krippendorff\'s Alpha: {round(alpha, 2)}, CI: {round(confidence_interval)}'
+                    plot = self.plot_multilabel_confusion_matrix(
+                        cm, list(int_to_label.values()), task, iaa_str)
 
-                    cm = confusion_matrix(
-                        reader1_task_list, reader2_task_list, labels=list(int_to_label.keys()))
+                    if save:
+                        annotators = '_'.join(self.names)
+                        task_name = task.replace(' ', '_').lower()
+                        plt.savefig(
+                            f'{self.iaa_dir}/{self.iaa_file}_{annotators}_{task_name}.png', bbox_inches='tight', dpi=300)
+                        plt.close()
+                    else:
+                        plot.show()
 
-                    cohen, ci = calculate_cohen_kappa_from_cfm_with_ci(cm)
+                iaa_dict['Krippendorff'] = alpha
+                iaa_dict['Krippendorff_Quality'] = interpret_alpha(alpha)
+                iaa_dict['Krippendorff_CI'] = confidence_interval
 
-                    return "Cohen's Kappa", cohen, ci
+            if 'Cohen' in measures:
+                if not self._task_is_multi_label(task):
+                    
+                    # If only two annotators, plot confusion matrix
+                    if len(readers) == 2:
+                        int_to_label, reader1_task_df = readers[0].get_label_task_df(
+                            task)
+                        int_to_label, reader2_task_df = readers[1].get_label_task_df(
+                            task)
+                        # flatten the pandas series
+                        reader1_task_list = reader1_task_df[task].apply(
+                            lambda x: x[0] if x else None)
+                        reader2_task_list = reader2_task_df[task].apply(
+                            lambda x: x[0] if x else None)
+
+                        # Check if there are nan values, replace them with -1
+                        if reader1_task_list.isnull().values.any() or reader2_task_list.isnull().values.any():
+                            reader1_task_list.fillna(-1, inplace=True)
+                            reader2_task_list.fillna(-1, inplace=True)
+                            int_to_label[-1] = 'None'
+
+                        cm = confusion_matrix(
+                            reader1_task_list, reader2_task_list, labels=list(int_to_label.keys()))
+                        measure = "Cohen's Kappa"
+                        cohen, ci = calculate_cohen_kappa_from_cfm_with_ci(cm)
+
+                        plot = self.plot_confusion_matrix(
+                            cm, list(int_to_label.values()), task, f'{measure}: {round(cohen,2)}, CI: {round(ci,2)}')
+
+                        if save:
+                            annotators = '_'.join([reader.annotator for reader in readers])
+                            task_name = task.replace(' ', '_').lower()
+                            plt.savefig(
+                                f'{self.iaa_dir}/{self.iaa_file}_{annotators}_{task_name}.png', bbox_inches='tight', dpi=300)
+                            plot.close()
+                        else:
+                            plot.show()
+
+                        iaa_dict['Cohen'] = cohen
+                        iaa_dict['Cohen_Quality'] = interpret_kappa(cohen)
+                        iaa_dict['Cohen_CI'] = ci
+
+                    else:
+                        pair_list = list(combinations(self.prodigy_readers, 2))
+                        average_kappa = 0
+                        average_boundary_limits = 0
+
+                        for c in pair_list:
+                            partial_iaa_dict = self.agreement_per_task(
+                                task, c, measures=['Cohen'], save=True)
+                            kappa = partial_iaa_dict['Cohen']
+                            ci = partial_iaa_dict['Cohen_CI']
+                            average_kappa += kappa
+                            average_boundary_limits += ci
+
+                        average_kappa /= len(pair_list)
+                        average_boundary_limits /= len(pair_list)
+
+                        iaa_dict['Cohen'] = average_kappa
+                        iaa_dict['Cohen_Quality'] = interpret_kappa(average_kappa)
+                        iaa_dict['Cohen_CI'] = average_boundary_limits
+
                 else:
-                    # get all possible combinations of annotators
-                    pair_list = list(combinations(self.prodigy_readers, 2))
-                    average_kappa = 0
-                    average_boundary_limits = 0
+                    print(
+                        f'{task} is a multi-label task, skipping Cohen\'s Kappa calculation')
 
-                    for c in pair_list:
-                        _, kappa, boundary_limits = self.agreement_per_task(
-                            task, c)
-                        average_kappa += kappa
-                        average_boundary_limits += boundary_limits
+            if 'Percent_Agreement' in measures:
+                agreement = calculate_percentage_agreement(
+                    task_df, 'id', 'reader', task)
+                iaa_dict['Percent_Agreement'] = agreement
+            
+            return iaa_dict
 
-                    average_kappa /= len(pair_list)
-                    average_boundary_limits /= len(pair_list)
-
-                    return "Avg Pairwise Cohen's Kappa", average_kappa, average_boundary_limits
-
-    def agreement_all_tasks(self, pprint: bool = True, csv_path: str = None) -> None:
+    def agreement_all_tasks(self, pprint: bool = True, csv_path: str = None, save: bool = True, measures: list[str] = None) -> None:
+        # Get directory of the csv_path
+        self.iaa_dir = os.path.dirname(csv_path)
+        self.iaa_file = os.path.basename(csv_path).split('.')[0]
+        if not measures:
+            measures = ['Krippendorff', 'Cohen', 'Percent_Agreement']
+            
         agreement_data = []
         for task in self.tasks.keys():
-            measure, value, ci_boundary = self.agreement_per_task(task)
-            self.task_confusion_matrix(task)
-            quality = interpret_alpha(
-                value) if measure == "Krippendorff's Alpha" else interpret_kappa(value)
-
-            agreement_data.append({'Task': task, 'Agreement Measure': measure,
-                                  'Value': value, 'Confidence Interval Boundary': ci_boundary,
-                                   'Quality': quality})
+            iaa_dict = self.agreement_per_task(
+                task, save=save, measures=measures)
+            iaa_dict['Task'] = task
+            agreement_data.append(iaa_dict)
             if pprint:
-                print(
-                    f'{task} - {measure}: {value}, CI boundary: {ci_boundary} --> {quality}')
-        # Creating DataFrame
+                for meas in measures:
+                    value = iaa_dict[meas]
+                    try: 
+                        quality = iaa_dict[f'{meas}_Quality']
+                        ci_boundary = iaa_dict[f'{meas}_CI']
+                        print(
+                            f'{task} - {meas}: {value}, CI boundary: {ci_boundary} --> {quality}')
+                    except KeyError:
+                        print(f'{task} - {meas}: {value}')
+                
         df = pd.DataFrame(agreement_data)
 
         # Writing DataFrame to CSV file
@@ -559,53 +636,24 @@ class ProdigyIAAHelper():
 
             # iterate through the dataframes in parallel using zip
 
-    def task_confusion_matrix(self, task_name: str):
-        if len(self.prodigy_readers) != 2:
-            raise NotImplementedError(
-                'Only pairwise comparison is implemented for confusion matrix')
-        else:
-            if self._is_valid_task(task_name):
-                id_to_label, task_df = self.get_task_df(task_name)
-                # where annotator = name[0], order by id, make array
-                first_pred = task_df[task_df['reader'] == self.names[0]].sort_values(by='id')[
-                    task_name]
-                second_pred = task_df[task_df['reader'] == self.names[1]].sort_values(by='id')[
-                    task_name]
+    def plot_confusion_matrix(self, cm, labels, task_name: str, iaa_str: str = None):
+        dist = ConfusionMatrixDisplay(
+            cm, display_labels=labels)
+        plt.figure(figsize=(10, 8))
+        dist.plot(xticks_rotation='vertical', ax=plt.gca())
+        plt.xlabel(self.names[0].capitalize(), fontsize=16)
+        plt.ylabel(self.names[1].capitalize(), fontsize=16)
 
-                if self._task_is_multi_label(task_name):
-                    first_pred_matrix = MultiLabelBinarizer(classes=list(
-                        id_to_label.keys())).fit_transform(first_pred.to_numpy())
-                    second_pred_matrix = MultiLabelBinarizer(classes=list(
-                        id_to_label.keys())).fit_transform(second_pred.to_numpy())
-                    cm = multilabel_confusion_matrix(
-                        first_pred_matrix, second_pred_matrix, labels=list(id_to_label.keys()))
-                    self.plot_multilabel_confusion_matrix(
-                        cm, list(id_to_label.values()))
+        plt.title(f'{task_name} - Single Label', fontsize=16, pad=20)
+        plt.tight_layout()
+        if iaa_str:
+            title_height = plt.gca().title.get_position()[1]
+            text_y = title_height + 0.02
+            plt.text(0.5, text_y, iaa_str, ha='center', va='center',
+                     fontsize=12, transform=plt.gca().transAxes)
+        return plt
 
-                else:
-
-                    first_pred_flat = first_pred.apply(
-                        lambda x: x[0] if x else None)
-                    second_pred_flat = second_pred.apply(
-                        lambda x: x[0] if x else None)
-                    # if there are None values, replace them with -1
-                    first_pred_flat.fillna(-1, inplace=True)
-                    second_pred_flat.fillna(-1, inplace=True)
-                    # add -1 to the label mapping
-                    id_to_label[-1] = 'None'
-
-                    cm = confusion_matrix(
-                        first_pred_flat, second_pred_flat, labels=list(id_to_label.keys()))
-                    # show confusion matrix
-                    dist = ConfusionMatrixDisplay(
-                        cm, display_labels=id_to_label.values())
-                    dist.plot(xticks_rotation='vertical')
-                    # add title
-                    plt.title(f'{task_name} - Single Label')
-                    plt.show()
-
-    @staticmethod
-    def plot_multilabel_confusion_matrix(cm, labels, task_name: str = None):
+    def plot_multilabel_confusion_matrix(self, cm, labels, task_name: str = None, iaa_str: str = None) -> Figure:
         """
         Plots the multilabel confusion matrix.
 
@@ -614,33 +662,38 @@ class ProdigyIAAHelper():
         labels (list): The list of labels.
         """
         n_labels = len(labels)
-        fig, axes = plt.subplots(n_labels, 1, figsize=(10, 5 * n_labels))
+        n_cols = 3
+        n_rows = (n_labels + n_cols - 1) // n_cols
 
-        if n_labels == 1:
-            # Ensure axes is a list of axes even if there's only one label
-            axes = [axes]
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 5 * n_rows))
+        axes = axes.flatten()
 
         for i, (ax, label) in enumerate(zip(axes, labels)):
-            # Extract the true negatives, false positives, false negatives, and true positives
             tn, fp, fn, tp = cm[i].ravel()
-
-            # Create the confusion matrix for the current label
             matrix = np.array([[tn, fp], [fn, tp]])
 
-            # Plot the confusion matrix
             cax = ax.matshow(matrix, cmap=plt.cm.Blues)
-            fig.colorbar(cax, ax=ax)
+            fig.colorbar(cax, ax=ax, shrink=0.75)
             ax.set_xticks([0, 1])
             ax.set_yticks([0, 1])
             ax.set_xticklabels(['Negative', 'Positive'])
             ax.set_yticklabels(['Negative', 'Positive'])
-            ax.set_title(f'Confusion Matrix for {label}')
+            ax.set_title(f'{label}')
 
-            # Annotate the confusion matrix
+            ax.set_xlabel(self.names[1].capitalize())
+            ax.set_ylabel(self.names[0].capitalize())
             for (j, k), val in np.ndenumerate(matrix):
-                ax.text(k, j, f'{val}', ha='center', va='center', color='red')
-        # add title
+                ax.text(k, j, f'{val}', ha='center', va='center')
+
+        for j in range(i + 1, len(axes)):
+            fig.delaxes(axes[j])
+
         if task_name:
-            plt.suptitle(f'{task_name} - Multi Label')
-        plt.tight_layout()
-        plt.show()
+            fig.suptitle(f'{task_name} - Multi Label', fontsize=16)
+
+        fig.subplots_adjust(top=0.94, wspace=0.5, hspace=0.1)
+
+        if iaa_str:
+            fig.text(0.5, 0.95, iaa_str, ha='center', va='top', fontsize=12)
+        
+        return fig
