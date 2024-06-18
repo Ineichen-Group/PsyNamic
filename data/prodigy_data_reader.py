@@ -485,7 +485,7 @@ class ProdigyIAAHelper():
                         classes=labels).fit_transform(second_pred.to_numpy())
                     cm = multilabel_confusion_matrix(
                         first_pred_matrix, second_pred_matrix, labels=labels)
-                    iaa_str = f'Krippendorff\'s Alpha: {round(alpha, 2)}, CI: {round(confidence_interval)}'
+                    iaa_str = f'Krippendorff\'s Alpha: {round(alpha, 2)}, CI: {round(confidence_interval, 2)}'
                     plot = self.plot_multilabel_confusion_matrix(
                         cm, list(int_to_label.values()), task, iaa_str)
 
