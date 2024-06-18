@@ -24,4 +24,5 @@ COPY . .
 
 # Get the Prodigy key from the docker_compose.yml file
 ARG PRODIGY_KEY
-RUN python -m pip install prodigy -f https://${PRODIGY_KEY}@download.prodi.gy
+ARG PRODIGY_VERSION
+RUN python -m pip install prodigy==${PRODIGY_VERSION} -f https://${PRODIGY_KEY}@download.prodi.gy
