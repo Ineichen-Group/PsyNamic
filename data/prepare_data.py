@@ -238,11 +238,15 @@ def main():
     # update_annotation_log('prodigy_inputs/psychedelic_study_24_20240425_152801.jsonl')
     # annotation_progress()
     
-    subsample = generate_subsample(cleaned_data, 40)
-    update_annotation_log(subsample)
-    annotation_progress()
+    # subsample = generate_subsample(cleaned_data, 40)
+    # update_annotation_log(subsample)
+    # annotation_progress()
     
-    subsample = generate_subsample(cleaned_data, 250)
+    # subsample = generate_subsample(cleaned_data, 250)
+    # update_annotation_log(subsample)
+    # annotation_progress()
+    
+    subsample = generate_subsample(cleaned_data, 40)
     update_annotation_log(subsample)
     annotation_progress()
 
