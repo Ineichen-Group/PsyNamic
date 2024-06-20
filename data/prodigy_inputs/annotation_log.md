@@ -23,6 +23,8 @@
 | -----------     | -----------                                 | ----- | ----------- | -----------              | -----------             |
 | V7              | psychedelic_study_250_20240523_195806.jsonl | 250   | In Progress | Ben                      |                         |
 | V7              | psychedelic_study_40_20240523_195805.jsonl  | 40    | In Progress | Pia, Ben                 | x                       |
+| -----------     | -----------                                 | ----- | ----------- | -----------              | -----------             |
+| V8              | psychedelic_study_40_20240620_145100.jsonl  | 40    | In Progress | Pia, Ben                 |                         |
 
 Current Total annotated: 1108
 
