@@ -381,7 +381,7 @@ class ProdigyDataReader:
 
 
 class ProdigyIAAHelper():
-    def __init__(self, list_of_files: list[str], names: list[str] = None, log: str = 'iaa.log', thematic_split: bool = True) -> None:
+    def __init__(self, list_of_files: list[str], names: list[str] = None, log: str = 'iaa.log') -> None:
         self.prodigy_files = list_of_files
         self.prodigy_readers = []
         self.log = log
@@ -389,7 +389,7 @@ class ProdigyIAAHelper():
             f'Annotator_{i}' for i in range(len(list_of_files))]
 
         for file, name in zip(list_of_files, names):
-            prodigy_reader = ProdigyDataReader(file, name, thematic_split)
+            prodigy_reader = ProdigyDataReader(file, name)
             self.prodigy_readers.append(prodigy_reader)
 
         self._inital_log()
