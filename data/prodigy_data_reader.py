@@ -25,12 +25,13 @@ FIXED_COLUMNS = ['id', 'text']
 
 
 class ProdigyDataReader:
-    def __init__(self, jsonl_path: str, annotator: str = None, thematic_split: bool = True):
+    def __init__(self, jsonl_path: str, annotator: str = None):
         self.jsonl_path = jsonl_path
         self._check_path()
 
         self.span_labels = []
         self._tasks = {}
+        self._thematic_split = None
 
         # Used with abstract only appearing once
         self._id_to_class_label = {}
@@ -38,10 +39,9 @@ class ProdigyDataReader:
         self._thematic_id_to_class_label = {}
 
         self.annotator = annotator
-        self.thematic_split = thematic_split
 
         # Check if data has been reordered
-        if self.thematic_split and 'reordered' not in self.jsonl_path:
+        if self.has_thematic_split() and 'reordered' not in self.jsonl_path:
             self._check_order()
 
         self.df = self._initiate_df()
@@ -66,9 +66,35 @@ class ProdigyDataReader:
     def __getitem__(self, id: str):
         return self.df[self.df['id'] == id]
 
+    def has_thematic_split(self)-> bool:
+        if self._thematic_split is None:
+            # Read in first three lines
+            with open(self.jsonl_path, 'r', encoding='utf-8') as infile:
+                first_three_lines = [json.loads(
+                    infile.readline().strip()) for _ in range(3)]
+                # check if options are the same in the files
+                options1 = first_three_lines[0]['options']
+                options2 = first_three_lines[1]['options']
+                options3 = first_three_lines[2]['options']
+                id1 = first_three_lines[0]['record_id']
+                id2 = first_three_lines[1]['record_id']
+                id3 = first_three_lines[2]['record_id']
+
+                # Case 1: Three different abstracts with the same options
+                if options1 == options2 == options3 and id1 != id2 != id3:
+                    self._thematic_split = False
+                # Case 2: The same abstract with different options
+                elif id1 == id2 == id3 and options1 != options2 != options3:
+                    self._thematic_split = True
+                # Case 3: Unordered thematic split or invalid format
+                else:
+                    self._check_order()
+                    self.has_thematic_split()
+        return self._thematic_split
+
     def get_prodigy_label_map(self, thematic: str = None) -> dict:
         # Case 1: Thematic split: abstracts appear three times & label mapping has been collected already
-        if self.thematic_split:
+        if self.has_thematic_split():
             # Case
             if self._thematic_id_to_class_label:
                 return self._thematic_id_to_class_label[thematic] if thematic else self._thematic_id_to_class_label
@@ -81,7 +107,7 @@ class ProdigyDataReader:
 
         with open(self.jsonl_path, 'r', encoding='utf-8') as infile:
             lines = [infile.readline().strip() for _ in range(
-                3)] if self.thematic_split else [infile.readline().strip()]
+                3)] if self.has_thematic_split() else [infile.readline().strip()]
 
             for line in lines:
                 id_to_class_label = {}
@@ -90,7 +116,7 @@ class ProdigyDataReader:
                 options = data['options']
                 for options in options:
                     id_to_class_label[options['id']] = options['text']
-                if self.thematic_split:
+                if self.has_thematic_split():
                     thematic_name = data['annotation']
                     self._thematic_id_to_class_label[thematic_name] = id_to_class_label
                 else:
@@ -249,7 +275,7 @@ class ProdigyDataReader:
     def _initiate_df(self) -> pd.DataFrame:
         class_labels = ['id', 'text']
         label_mapping = self.get_prodigy_label_map()
-        if self.thematic_split:
+        if self.has_thematic_split():
             for thematic, thematic_label_mapping in label_mapping.items():
                 class_labels += list(thematic_label_mapping.values())
         else:
@@ -264,7 +290,7 @@ class ProdigyDataReader:
                 line_dict = json.loads(line_dict)
                 lines.append(line_dict)
                 # keep collecting all information until the next abstract
-                if self.thematic_split:
+                if self.has_thematic_split():
                     if len(lines) < 3:
                         continue
                     else:
@@ -277,7 +303,7 @@ class ProdigyDataReader:
                 new_row = self._new_empty_row()
                 rejected = []
                 for line_dict in lines:
-                    if self.thematic_split:
+                    if self.has_thematic_split():
                         thematic = line_dict['annotation']
                         prodigy_label_map = self.get_prodigy_label_map(
                             thematic)
@@ -297,7 +323,7 @@ class ProdigyDataReader:
                             new_row[class_label] = 1
 
                 # check if the same abstract was accepted and rejected -> annotation error
-                if self.thematic_split and (len(rejected) == 1 or len(rejected) == 2):
+                if self._thematic_split and (len(rejected) == 1 or len(rejected) == 2):
                     raise ValueError(
                         f'Same abstract was accepted and rejected {rejected[0]}')
 
@@ -467,7 +493,7 @@ class ProdigyIAAHelper():
             int_to_label, task_df = self.get_task_df(task)
             readers = self.prodigy_readers if readers is None else readers
             if 'Krippendorff' in measures:
-              
+
                 alpha, low, high = calculate_krippendorff_alpha_with_ci(
                     task_df, 'id', 'reader', task)
                 confidence_interval = high - low
@@ -504,7 +530,7 @@ class ProdigyIAAHelper():
 
             if 'Cohen' in measures:
                 if not self._task_is_multi_label(task):
-                    
+
                     # If only two annotators, plot confusion matrix
                     if len(readers) == 2:
                         int_to_label, reader1_task_df = readers[0].get_label_task_df(
@@ -532,7 +558,8 @@ class ProdigyIAAHelper():
                             cm, list(int_to_label.values()), task, f'{measure}: {round(cohen,2)}, CI: {round(ci,2)}')
 
                         if save:
-                            annotators = '_'.join([reader.annotator for reader in readers])
+                            annotators = '_'.join(
+                                [reader.annotator for reader in readers])
                             task_name = task.replace(' ', '_').lower()
                             plt.savefig(
                                 f'{self.iaa_dir}/{self.iaa_file}_{annotators}_{task_name}.png', bbox_inches='tight', dpi=300)
@@ -561,7 +588,8 @@ class ProdigyIAAHelper():
                         average_boundary_limits /= len(pair_list)
 
                         iaa_dict['Cohen'] = average_kappa
-                        iaa_dict['Cohen_Quality'] = interpret_kappa(average_kappa)
+                        iaa_dict['Cohen_Quality'] = interpret_kappa(
+                            average_kappa)
                         iaa_dict['Cohen_CI'] = average_boundary_limits
 
                 else:
@@ -572,7 +600,7 @@ class ProdigyIAAHelper():
                 agreement = calculate_percentage_agreement(
                     task_df, 'id', 'reader', task)
                 iaa_dict['Percent_Agreement'] = agreement
-            
+
             return iaa_dict
 
     def agreement_all_tasks(self, pprint: bool = True, csv_path: str = None, save: bool = True, measures: list[str] = None) -> None:
@@ -581,7 +609,7 @@ class ProdigyIAAHelper():
         self.iaa_file = os.path.basename(csv_path).split('.')[0]
         if not measures:
             measures = ['Krippendorff', 'Cohen', 'Percent_Agreement']
-            
+
         agreement_data = []
         for task in self.tasks.keys():
             iaa_dict = self.agreement_per_task(
@@ -591,14 +619,14 @@ class ProdigyIAAHelper():
             if pprint:
                 for meas in measures:
                     value = iaa_dict[meas]
-                    try: 
+                    try:
                         quality = iaa_dict[f'{meas}_Quality']
                         ci_boundary = iaa_dict[f'{meas}_CI']
                         print(
                             f'{task} - {meas}: {value}, CI boundary: {ci_boundary} --> {quality}')
                     except KeyError:
                         print(f'{task} - {meas}: {value}')
-                
+
         df = pd.DataFrame(agreement_data)
 
         # Writing DataFrame to CSV file
@@ -695,5 +723,5 @@ class ProdigyIAAHelper():
 
         if iaa_str:
             fig.text(0.5, 0.95, iaa_str, ha='center', va='top', fontsize=12)
-        
+
         return fig
