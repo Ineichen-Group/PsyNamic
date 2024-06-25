@@ -2,14 +2,20 @@ import json
 
 
 def remove_pattern_from_json(jsonl_file: str) -> None:
-    json_file_new = jsonl_file.replace('.jsonl', '_pattern_removed.jsonl')
-    with open(jsonl_file, 'r') as infile, open(json_file_new, 'w') as outfile:
+    json_out_token = jsonl_file.replace('.jsonl', '_pattern_removed_token.jsonl')
+    json_out_text = jsonl_file.replace('.jsonl', '_pattern_removed_text.jsonl')
+    with open(jsonl_file, 'r') as infile, open(json_out_token, 'w') as outfile_token, open(json_out_text, 'w') as outfile_text:
+        count = 0
         for line in infile:
+            count +=1
+            if count == 3:
+                count = 0
             data = json.loads(line)
-            spans = data['spans']
-            spans = [span for span in spans if 'pattern' not in span.keys()]
+            spans = [span for span in data['spans'] if 'pattern' not in span.keys()]
             data['spans'] = spans
-            outfile.write(json.dumps(data, ensure_ascii=False) + '\n')
+            if count == 1:
+                outfile_token.write(json.dumps(data, ensure_ascii=False) + '\n')
+            outfile_text.write(json.dumps(data, ensure_ascii=False) + '\n')
 
 
 if __name__ == '__main__':
