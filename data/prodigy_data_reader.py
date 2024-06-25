@@ -21,8 +21,6 @@ FIXED_COLUMNS = ['id', 'text']
 # FIXED_COLUMNS = ['id', 'text', 'annotation']
 # TODO: better solution for fixed columns
 
-# Check if task option are properly sorted
-
 
 class ProdigyDataReader:
     def __init__(self, jsonl_path: str, annotator: str = None):
@@ -47,7 +45,10 @@ class ProdigyDataReader:
         self.df = self._initiate_df()
         self.rejected = []
 
-        self._read_all()
+        self.ner_per_abstract = defaultdict(lambda: defaultdict(list))
+
+        self._read_all_class()
+        self._read_all_ner()
 
     def __iter__(self):
         return self
@@ -191,6 +192,17 @@ class ProdigyDataReader:
 
             return int_to_label, new_datafame
 
+    def get_ner_per_abstract(self, id: int, label: str = None) -> list[(str, str)]:
+        ners = []
+        if label:
+            for ner in self.ner_per_abstract[id][label]:
+                ners.append((' '.join(ner), label))
+        else:
+            for label in self.ner_per_abstract[id]:
+                for ner in self.ner_per_abstract[id][label]:
+                    ners.append((' '.join(ner), label))
+        return ners
+
     def _is_task_multi_label(self, task_name: str) -> bool:
         if self._is_valid_task(task_name):
             _, df = self.get_label_task_df(task_name)
@@ -216,7 +228,7 @@ class ProdigyDataReader:
             class_labels += list(label_mapping.values())
         return pd.DataFrame(columns=class_labels)
 
-    def _read_all(self) -> None:
+    def _read_all_class(self) -> None:
         all_rows = []
         with open(self.jsonl_path, 'r', encoding='utf-8') as infile:
             lines = []
@@ -272,6 +284,26 @@ class ProdigyDataReader:
         self.df = pd.concat([self.df, pd.DataFrame(all_rows)])
         # reorder rows according to the id
         self.df = self.df.sort_values(by='id')
+
+    def _read_all_ner(self) -> None:
+        with open(self.jsonl_path, 'r', encoding='utf-8') as infile:
+            for line in infile:
+                data = json.loads(line)
+                tokens = data['tokens']
+                spans = data['spans']
+                id = data['record_id']
+                # check if id already exists
+                if id in self.ner_per_abstract:
+                    raise ValueError(
+                        f'Id {id} already exists in NER_PER_ABSTRACT, check validity of the data')
+                for span in spans:
+                    if 'label' in span.keys():
+                        start = span['token_start']
+                        end = span['token_end']
+                        ner_tokens = [tokens[i]['text']
+                                      for i in range(start, end+1)]
+                        self.ner_per_abstract[id][span['label']].append(
+                            ner_tokens)
 
     def _new_empty_row(self) -> dict:
         column_names = list(self.df.columns)

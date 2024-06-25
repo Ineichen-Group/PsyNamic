@@ -144,16 +144,32 @@ class TestParseProdigyData(unittest.TestCase):
 
         # check if the following raises a ValueErrror
         self.assertRaises(ValueError,  ProdigyDataReader, os.path.join(
-                self.relative_path, 'test_data/test_export_with_thematic_split_unordered_missing.jsonl')
+            self.relative_path, 'test_data/test_export_with_thematic_split_unordered_missing.jsonl')
         )
         prodigy_reader_unorderd = ProdigyDataReader(
             os.path.join(
                 self.relative_path, 'test_data/test_export_with_thematic_split_unordered.jsonl')
         )
         self.assertTrue(prodigy_reader_unorderd.has_thematic_split())
-        self.assertTrue(prodigy_reader_unorderd.jsonl_path.endswith('reordered.jsonl'))
+        self.assertTrue(
+            prodigy_reader_unorderd.jsonl_path.endswith('reordered.jsonl'))
         # check if the file was created
         self.assertTrue(os.path.exists(prodigy_reader_unorderd.jsonl_path))
+
+    def test_ner_collection(self):
+        ners = self.prodigy_reader.get_ner_per_abstract(4786)
+        self.assertEqual(len(ners), 1)
+
+        ners = self.prodigy_reader.get_ner_per_abstract(4786, 'Dosage')
+        self.assertEqual(len(ners), 1)
+
+        ners = self.prodigy_reader.get_ner_per_abstract(
+            4786, 'Application Area')
+        self.assertEqual(len(ners), 0)
+
+        ners = self.prodigy_reader.get_ner_per_abstract(4786)
+        ners_expected = [('2 mg', 'Dosage')]
+        self.assertEqual(ners, ners_expected)
 
 
 if __name__ == '__main__':
