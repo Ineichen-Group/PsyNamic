@@ -1,12 +1,18 @@
-from prodigy_data_reader import ProdigyDataReader
+from prodigy_data_reader import ProdigyDataCollector
+
+
+def descriptive_analysis(list_jsonl: str):
+    prodigy_data = ProdigyDataCollector(list_jsonl)
+    prodigy_data.visualize_dist()
+
 
 def main():
-    data_path = 'prodigy_exports/prodigy_export_100_20240411_20240416_162821.jsonl'
-    out_path = 'processed_data/psychner_data_flat.csv'
-    
-    my_reader = ProdigyDataReader(data_path)
-    print(my_reader.get_classification_tasks())
-    # my_reader.export_to_csv(out_path)
-    
+    list_jsonl = [
+        'data/prodigy_exports/prodigy_export_ben_95_20240423_113434.jsonl',
+        'data/prodigy_exports/prodigy_export_iaa_ben_40_20240523_20240604_094449_reordered.jsonl',
+    ]
+    descriptive_analysis(list_jsonl)
+
+
 if __name__ == '__main__':
     main()

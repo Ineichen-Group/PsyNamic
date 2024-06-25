@@ -66,7 +66,7 @@ class ProdigyDataReader:
     def __getitem__(self, id: str):
         return self.df[self.df['id'] == id]
 
-    def has_thematic_split(self)-> bool:
+    def has_thematic_split(self) -> bool:
         if self._thematic_split is None:
             # Read in first three lines
             with open(self.jsonl_path, 'r', encoding='utf-8') as infile:
@@ -145,15 +145,7 @@ class ProdigyDataReader:
 
         return self._tasks
 
-    def export_to_csv(self, out_path: str) -> None:
-        # check if path exists
-        dir = os.path.dirname(out_path)
-        if not os.path.exists(dir):
-            raise ValueError(f'Path "{dir}" does not exist')
-        else:
-            self.df.to_csv(out_path, index=False)
-
-    def get_onehot_task_df(self, task_name: str, one_hot: bool = False) -> pd.DataFrame:
+    def get_onehot_task_df(self, task_name: str) -> pd.DataFrame:
         if self._is_valid_task(task_name):
             task_filtered = {}
             # add fixed columns
@@ -167,12 +159,16 @@ class ProdigyDataReader:
             task_filtered_df = pd.DataFrame(task_filtered)
         return task_filtered_df
 
-    def get_label_task_df(self, task_name: str) -> tuple[dict, pd.DataFrame]:
+    def get_label_task_df(self, task_name: str, label_to_int: None) -> tuple[dict, pd.DataFrame]:
         if self._is_valid_task(task_name):
-            int_to_label = {index: label for index,
-                            label in enumerate(self._tasks[task_name])}
-            label_to_int = {label: index for index,
-                            label in enumerate(self._tasks[task_name])}
+            if label_to_int:
+                int_to_label = {index: label for index,
+                                label in enumerate(label_to_int.keys())}
+            else:
+                int_to_label = {index: label for index,
+                                label in enumerate(self._tasks[task_name])}
+                label_to_int = {label: index for index,
+                                label in enumerate(self._tasks[task_name])}
             task_filtered = {}
             # add fixed columns
             for fixed_col in FIXED_COLUMNS:
@@ -195,33 +191,6 @@ class ProdigyDataReader:
 
             return int_to_label, new_datafame
 
-    def visualize_distribution(self, x_label: str = None, save_path: str = None) -> None:
-        if x_label is None:
-            classification_tasks = self.get_classification_tasks().keys()
-
-            # Set up the subplots
-            num_tasks = len(classification_tasks)
-            num_rows = num_tasks // 2 + num_tasks % 2  # 2 columns, variable number of rows
-            fig, axes = plt.subplots(
-                nrows=num_rows, ncols=2, figsize=(12, 4 * num_rows))
-            axes = axes.flatten()  # Flatten axes if more than 1 row
-
-            for idx, task in enumerate(classification_tasks):
-                ax = axes[idx] if num_rows > 1 else axes
-                self._plot_task_distribution(task, ax)
-
-            plt.subplots_adjust(hspace=0.8, top=0.96)
-
-            fig.suptitle('Overview of all Classification Tasks', fontsize=16)
-
-        else:
-            self._plot_task_distribution(x_label)
-
-        if save_path:
-            plt.savefig(save_path)
-        else:
-            plt.show()
-
     def _is_task_multi_label(self, task_name: str) -> bool:
         if self._is_valid_task(task_name):
             _, df = self.get_label_task_df(task_name)
@@ -229,41 +198,6 @@ class ProdigyDataReader:
                 if len(row[task_name]) > 1:
                     return True
             return False
-
-    def _plot_task_distribution(self, task: str, ax=None):
-        df = self.get_onehot_task_df(task)
-
-        relevant_columns = [
-            col for col in df.columns if col not in FIXED_COLUMNS]
-        df = df[relevant_columns]
-
-        df_sum = df.sum()
-
-        if ax is None:
-            ax = plt.gca()
-
-        sns.set_theme(style="whitegrid")  # Set style
-        sns.barplot(x=df_sum.index, y=df_sum.values, ax=ax)
-
-        ax.set_ylabel('Count')
-        ax.set_xlabel('')
-        ax.set_title(f'Counts of {task}')
-        plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
-
-        for p in ax.patches:
-            height = p.get_height()
-            if height > 0:
-                ax.annotate(format(height, '.0f'),
-                            (p.get_x() + p.get_width() / 2., p.get_height()),
-                            ha='center', va='center',
-                            xytext=(0, -10),
-                            textcoords='offset points')
-            else:
-                ax.annotate(format(height, '.0f'),
-                            (p.get_x() + p.get_width() / 2., p.get_height()),
-                            ha='center', va='center',
-                            xytext=(0, 5),
-                            textcoords='offset points')
 
     def _is_valid_task(self, task_name: str) -> Union[bool, None]:
         if not task_name in self.get_classification_tasks().keys():
@@ -378,6 +312,164 @@ class ProdigyDataReader:
         filename_reorder = filename + '_reordered' + file_extension
         if os.path.exists(filename_reorder):
             self.jsonl_path = filename_reorder
+
+
+class ProdigyDataCollector():
+    def __init__(self, list_of_files: list[str]) -> None:
+        self.prodigy_files = list_of_files
+        self.prodigy_readers = []
+        for file in list_of_files:
+            prodigy_reader = ProdigyDataReader(file)
+            self.prodigy_readers.append(prodigy_reader)
+
+        self.tasks = {}
+
+        self._check_tasks()
+        self._read_all()
+        self._check_duplicates()
+
+    def __len__(self) -> int:
+        return len(self.df)
+
+    def __getitem__(self, id: str) -> pd.DataFrame:
+        return self.df[self.df['id'] == id]
+
+    def _read_all(self) -> None:
+        self.df = pd.concat([reader.df for reader in self.prodigy_readers])
+
+    def _check_tasks(self) -> None:
+        # check if all tasks are the same
+        tasks_first = self.prodigy_readers[0].get_classification_tasks()
+        for reader in self.prodigy_readers[1:]:
+            tasks = reader.get_classification_tasks()
+            if tasks != tasks_first:
+                print(self.compare_dictionaries(tasks, tasks_first))
+                raise ValueError(
+                    f'Tasks are not the same in {reader.jsonl_path} and {self.prodigy_readers[0].jsonl_path}')
+        self.tasks = tasks_first
+
+    @staticmethod
+    def compare_dictionaries(dict1, dict2):
+        differences = {
+            'value_differences': {},
+            'key_differences': {}
+        }
+
+        # Finding keys in both dictionaries
+        all_keys = set(dict1.keys()).union(dict2.keys())
+
+        # Iterate over each key
+        for key in all_keys:
+            value1 = dict1.get(key, '__MISSING__')
+            value2 = dict2.get(key, '__MISSING__')
+
+            if key in dict1 and key in dict2:
+                if value1 != value2:
+                    differences['value_differences'][key] = (value1, value2)
+            else:
+                differences['key_differences'][key] = (
+                    value1 if key in dict1 else None, value2 if key in dict2 else None)
+
+        return differences
+
+    def _check_duplicates(self) -> None:
+        if self.df.duplicated(subset='id').any():
+            raise ValueError('Duplicates in the data')
+
+    def visualize_dist(self, x_label: str = None, save_path: str = None) -> None:
+        if x_label is None:
+            classification_tasks = list(self.tasks.keys())
+
+            # Set up the subplots
+            num_tasks = len(classification_tasks)
+            num_cols = 5
+            num_rows = (num_tasks + num_cols - 1) // num_cols
+            fig, axes = plt.subplots(nrows=num_rows, ncols=num_cols, figsize=(15, 5 * num_rows))
+            axes = axes.flatten()  # Flatten axes if more than 1 row
+
+            for idx, task in enumerate(classification_tasks):
+                ax = axes[idx]
+                self._plot_task_dist(task, ax)
+
+            # Hide any unused subplots
+            for idx in range(num_tasks, len(axes)):
+                fig.delaxes(axes[idx])
+
+            plt.subplots_adjust(hspace=0.8, top=0.90, bottom=0.15)
+
+            fig.suptitle('Overview of all Classification Tasks', fontsize=16)
+
+
+        else:
+            self._plot_task_dist(x_label)
+
+        if save_path:
+            plt.savefig(save_path, bbox_inches='tight')
+        else:
+            plt.show()
+
+    def _plot_task_dist(self, task: str, ax=None):
+        df = self.get_onehot_task_df(task)
+
+        relevant_columns = [
+            col for col in df.columns if col not in FIXED_COLUMNS]
+        df = df[relevant_columns]
+
+        df_sum = df.sum()
+
+        if ax is None:
+            ax = plt.gca()
+
+        sns.set_theme(style="whitegrid")  # Set style
+        sns.barplot(x=df_sum.index, y=df_sum.values, ax=ax)
+
+        ax.set_ylabel('Count')
+        ax.set_xlabel('')
+        ax.set_title(f'Counts of {task}')
+        plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
+
+        for p in ax.patches:
+            height = p.get_height()
+            if height > 5:
+                ax.annotate(format(height, '.0f'),
+                            (p.get_x() + p.get_width() / 2., p.get_height()),
+                            ha='center', va='center',
+                            xytext=(0, -10),
+                            textcoords='offset points')
+            else:
+                ax.annotate(format(height, '.0f'),
+                            (p.get_x() + p.get_width() / 2., p.get_height()),
+                            ha='center', va='top',
+                            xytext=(0, 12),
+                            textcoords='offset points')
+
+    def _is_valid_task(self, task_name: str) -> Union[bool, None]:
+        if not task_name in self.tasks.keys():
+            raise ValueError(
+                f'Invalid task name, options are ´{self.get_classification_tasks().keys()}´')
+        else:
+            return True
+
+    def get_label_task_df(self, task: str) -> pd.DataFrame:
+        if self._is_valid_task(task):
+            label_to_int, task_df = self.prodigy_readers[0].get_label_task_df(
+                task)
+            for reader in self.prodigy_readers[1:]:
+                _, reader_task_df = reader.get_task_df(task, label_to_int)
+                task_df = pd.concat([task_df, reader_task_df])
+
+            return task_df
+
+    def get_onehot_task_df(self, task_name: str) -> pd.DataFrame:
+        if self._is_valid_task(task_name):
+            task_filtered_df = self.prodigy_readers[0].get_onehot_task_df(
+                task_name)
+            for reader in self.prodigy_readers[1:]:
+                reader_task_df = reader.get_onehot_task_df(task_name)
+                task_filtered_df = pd.concat(
+                    [task_filtered_df, reader_task_df])
+
+            return task_filtered_df
 
 
 class ProdigyIAAHelper():
