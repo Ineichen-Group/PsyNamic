@@ -27,7 +27,7 @@ class ProdigyDataReader:
         self.jsonl_path = jsonl_path
         self._check_path()
 
-        self.span_labels = []
+        self.span_labels = set()
         self._tasks = {}
         self._thematic_split = None
 
@@ -293,16 +293,15 @@ class ProdigyDataReader:
                 spans = data['spans']
                 id = data['record_id']
                 # check if id already exists
-                if id in self.ner_per_abstract:
-                    raise ValueError(
-                        f'Id {id} already exists in NER_PER_ABSTRACT, check validity of the data')
                 for span in spans:
                     if 'label' in span.keys():
                         start = span['token_start']
                         end = span['token_end']
+                        label = span['label']
+                        self.span_labels.add(label)
                         ner_tokens = [tokens[i]['text']
                                       for i in range(start, end+1)]
-                        self.ner_per_abstract[id][span['label']].append(
+                        self.ner_per_abstract[id][label].append(
                             ner_tokens)
 
     def _new_empty_row(self) -> dict:
@@ -368,6 +367,12 @@ class ProdigyDataCollector():
 
     def _read_all(self) -> None:
         self.df = pd.concat([reader.df for reader in self.prodigy_readers])
+        # merge all ner_per_abstract dictionaries
+        self.ner_per_abstract = {}
+        self.span_labels = set()
+        for reader in self.prodigy_readers:
+            self.ner_per_abstract.update(reader.ner_per_abstract)
+            self.span_labels = self.span_labels.union(reader.span_labels)
 
     def _check_tasks(self) -> None:
         # check if all tasks are the same
@@ -539,6 +544,62 @@ class ProdigyDataCollector():
             plt.close()
         else:
             plt.show()
+
+    def get_ner_per_abstract(self, id: int, label: str = None) -> list[(str, str)]:
+        ners = []
+        if label:
+            for ner in self.ner_per_abstract[id][label]:
+                ners.append((' '.join(ner), label))
+        else:
+            for label in self.ner_per_abstract[id]:
+                for ner in self.ner_per_abstract[id][label]:
+                    ners.append((' '.join(ner), label))
+        return ners
+
+    def get_ner_stats(self):
+        # Report entities frequency of NER (avg. per abstract)
+        nr_abstracts = len(self)
+        nr_total_entities = 0
+        for abstract in self.ner_per_abstract.values():
+            for entity in abstract.values():
+                nr_total_entities += len(entity)
+        avg_nr_entities_per_abstract = nr_total_entities / nr_abstracts
+
+        # Report entities frequency of NER (avg. per abstract per label)
+        avg_ner_per_abstract_per_label = {}
+        nr_ner_per_label = {}
+        for label in self.span_labels:
+            nr_entities = 0
+            for abstract in self.ner_per_abstract.values():
+                if label in abstract:
+                    nr_entities += len(abstract[label])
+            avg_ner_per_abstract_per_label[label] = nr_entities / nr_abstracts
+            nr_ner_per_label[label] = nr_entities
+
+        # Report average NER length
+        avg_ner_length_per_label = {}
+        for label in self.span_labels:
+            nr_entities = 0
+            total_length = 0
+            for abstract in self.ner_per_abstract.values():
+                if label in abstract:
+                    for entity in abstract[label]:
+                        total_length += len(entity)
+                        nr_entities += 1
+            avg_ner_length_per_label[label] = total_length / nr_entities
+
+        # Pretty print
+        print('Total number of entities per label:')
+        for label, nr in nr_ner_per_label.items():
+            print(f'\t {label}: {nr}')
+        print(
+            f'Average number of entities per abstract: {avg_nr_entities_per_abstract}')
+        print('Average number of entities per abstract per label:')
+        for label, avg in avg_ner_per_abstract_per_label.items():
+            print(f'\t {label}: {avg}')
+        print('Average length of entities per label:')
+        for label, avg in avg_ner_length_per_label.items():
+            print(f'\t {label}: {avg}')
 
 
 class ProdigyIAAHelper():

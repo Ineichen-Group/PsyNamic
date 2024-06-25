@@ -7,6 +7,7 @@ def descriptive_analysis(list_jsonl: str):
     prodigy_data.visualize_dist('Study Type')
     prodigy_data.visualize_nr_dist()
     prodigy_data.visualize_nr_dist('Study Type')
+    prodigy_data.get_ner_stats()
 
 
 def main():
