@@ -384,48 +384,45 @@ class ProdigyDataCollector():
             num_tasks = len(classification_tasks)
             num_cols = 5
             num_rows = (num_tasks + num_cols - 1) // num_cols
-            fig, axes = plt.subplots(nrows=num_rows, ncols=num_cols, figsize=(15, 5 * num_rows))
+            fig, axes = plt.subplots(
+                nrows=num_rows, ncols=num_cols, figsize=(15, 5 * num_rows))
             axes = axes.flatten()  # Flatten axes if more than 1 row
 
             for idx, task in enumerate(classification_tasks):
                 ax = axes[idx]
-                self._plot_task_dist(task, ax)
+                task_freq = self.get_onehot_task_df(
+                    task).drop(columns=FIXED_COLUMNS).sum()
+                self._plot_task_dist(task_freq, task, ax)
 
             # Hide any unused subplots
             for idx in range(num_tasks, len(axes)):
                 fig.delaxes(axes[idx])
 
-            plt.subplots_adjust(hspace=0.8, top=0.90, bottom=0.15)
+            plt.subplots_adjust(hspace=0.8, top=0.95, bottom=0.15)
 
             fig.suptitle('Overview of all Classification Tasks', fontsize=16)
 
-
         else:
-            self._plot_task_dist(x_label)
+            task_freq = self.get_onehot_task_df(
+                x_label).drop(columns=FIXED_COLUMNS).sum()
+            self._plot_task_dist(task_freq, x_label)
 
         if save_path:
             plt.savefig(save_path, bbox_inches='tight')
+            plt.close()
         else:
             plt.show()
 
-    def _plot_task_dist(self, task: str, ax=None):
-        df = self.get_onehot_task_df(task)
-
-        relevant_columns = [
-            col for col in df.columns if col not in FIXED_COLUMNS]
-        df = df[relevant_columns]
-
-        df_sum = df.sum()
-
+    def _plot_task_dist(self, frequencies: pd.Series, x_label: str, ax=None):
         if ax is None:
             ax = plt.gca()
 
-        sns.set_theme(style="whitegrid")  # Set style
-        sns.barplot(x=df_sum.index, y=df_sum.values, ax=ax)
+        sns.set_theme(style="whitegrid")
+
+        sns.barplot(x=frequencies.index, y=frequencies.values, ax=ax)
 
         ax.set_ylabel('Count')
-        ax.set_xlabel('')
-        ax.set_title(f'Counts of {task}')
+        ax.set_xlabel(x_label)
         plt.setp(ax.get_xticklabels(), rotation=45, ha='right')
 
         for p in ax.patches:
@@ -446,7 +443,7 @@ class ProdigyDataCollector():
     def _is_valid_task(self, task_name: str) -> Union[bool, None]:
         if not task_name in self.tasks.keys():
             raise ValueError(
-                f'Invalid task name, options are ´{self.get_classification_tasks().keys()}´')
+                f'Invalid task name, options are ´{self.tasks.keys()}´')
         else:
             return True
 
@@ -470,6 +467,46 @@ class ProdigyDataCollector():
                     [task_filtered_df, reader_task_df])
 
             return task_filtered_df
+
+    def visualize_nr_dist(self, x_label: str = None, save_path: str = None) -> None:
+        if x_label is None:
+            classification_tasks = list(self.tasks.keys())
+
+            # Set up the subplots
+            num_tasks = len(classification_tasks)
+            num_cols = 5
+            num_rows = (num_tasks + num_cols - 1) // num_cols
+            fig, axes = plt.subplots(
+                nrows=num_rows, ncols=num_cols, figsize=(15, 5 * num_rows))
+            axes = axes.flatten()  # Flatten axes if more than 1 row
+
+            for idx, task in enumerate(classification_tasks):
+                ax = axes[idx]
+                task_freq = self.get_onehot_task_df(
+                    task).drop(columns=FIXED_COLUMNS)
+                task_freq = task_freq.sum(axis=1).value_counts()
+                self._plot_task_dist(task_freq, f'Nr of Labels for {task}', ax)
+
+            # Hide any unused subplots
+            for idx in range(num_tasks, len(axes)):
+                fig.delaxes(axes[idx])
+
+            plt.subplots_adjust(hspace=0.8, top=0.95, bottom=0.15)
+
+            fig.suptitle(
+                'Number of Labels of all Classification Tasks', fontsize=16)
+
+        else:
+            task_freq = self.get_onehot_task_df(
+                x_label).drop(columns=FIXED_COLUMNS)
+            task_freq = task_freq.sum(axis=1).value_counts()
+            self._plot_task_dist(task_freq, f'Nr of labels for {x_label}')
+
+        if save_path:
+            plt.savefig(save_path, bbox_inches='tight')
+            plt.close()
+        else:
+            plt.show()
 
 
 class ProdigyIAAHelper():

@@ -4,6 +4,9 @@ from prodigy_data_reader import ProdigyDataCollector
 def descriptive_analysis(list_jsonl: str):
     prodigy_data = ProdigyDataCollector(list_jsonl)
     prodigy_data.visualize_dist()
+    prodigy_data.visualize_dist('Study Type')
+    prodigy_data.visualize_nr_dist()
+    prodigy_data.visualize_nr_dist('Study Type')
 
 
 def main():
