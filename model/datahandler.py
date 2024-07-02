@@ -32,6 +32,9 @@ class DataSplit(Dataset):
         text = self.df.iloc[idx][self.TEXT_COL]
         labels = self.df.iloc[idx][self.LABEL_COL]
         return {self.TEXT_COL: text, self.LABEL_COL: labels}
+    
+    def to_csv(self, save_path: str) -> None:
+        self.df.to_csv(save_path, index=False)
 
 
 class DataHandler():
@@ -47,12 +50,12 @@ class DataHandler():
         # Create a dummy df for testing, with three columns: id, text, labels and 3 dummy rows
         # Generate dummy data
         data = {
-            self.ID_COL: list(range(1, 21)),  # IDs from 1 to 20
+            self.ID_COL: list(range(1, 61)),  # IDs from 1 to 20
             self.TEXT_COL: [
-                'Text number {}'.format(i) for i in range(1, 21)
+                'Text number {}'.format(i) for i in range(1, 61)
             ],  # Texts with placeholder numbers
             # Randomly select labels 0, 1, or 2
-            self.LABEL_COL: np.random.choice([0, 1, 2], size=20)
+            self.LABEL_COL: np.random.choice([0, 1, 2], size=60)
         }
 
         self.df = pd.DataFrame(data)
@@ -63,7 +66,7 @@ class DataHandler():
         self.train = None
         self.test = None
         self.val = None
-        self.fold = []
+        self.folds = []
 
     def __len__(self) -> int:
         return len(self.df)
@@ -161,31 +164,31 @@ class DataHandler():
                         train_val_split.split(train_df, train_df[self.LABEL_COL]))
                     actual_train_df = train_df.iloc[actual_train_idx]
                     val_df = train_df.iloc[val_idx]
-                    folds.append(DataSplit(actual_train_df),
-                                 DataSplit(test_df)), DataSplit(val_df)
+                    folds.append((DataSplit(actual_train_df),
+                                 DataSplit(test_df), DataSplit(val_df)))
                 else:
-                    folds.append(DataSplit(train_df), DataSplit(test_df), None)
+                    folds.append((DataSplit(train_df), DataSplit(test_df), None))
 
-                self.folds = folds
-                return folds
+            self.folds = folds
+            return folds
 
     def save_split(self, save_path: str) -> None:
         if not path.exists(save_path):
             raise FileNotFoundError(f'Path {save_path} does not exist.')
-        if self.fold:
-            for i, fold in enumerate(self.fold):
-                fold[0].to_csv(f'{save_path}/train_fold_{i}.csv', index=False)
-                fold[1].to_csv(f'{save_path}/test_fold_{i}.csv', index=False)
+        if self.folds:
+            for i, fold in enumerate(self.folds):
+                fold[0].to_csv(f'{save_path}/train_fold_{i}.csv')
+                fold[1].to_csv(f'{save_path}/test_fold_{i}.csv')
                 try:
                     fold[2].to_csv(
-                        f'{save_path}/val_fold_{i}.csv', index=False)
-                except KeyError:
+                        f'{save_path}/val_fold_{i}.csv')
+                except AttributeError:
                     pass
         else:
-            self.train.to_csv(path.join(save_path, 'train.csv'), index=False)
-            self.test.to_csv(path.join(save_path, 'test.csv'), index=False)
+            self.train.to_csv(path.join(save_path, 'train.csv'))
+            self.test.to_csv(path.join(save_path, 'test.csv'))
             try:
-                self.val.to_csv(path.join(save_path, 'val.csv'), index=False)
+                self.val.to_csv(path.join(save_path, 'val.csv'))
             except AttributeError:
                 pass
 
@@ -231,7 +234,7 @@ class DataHandler():
                         if i == 0:
                             self.df = pd.concat([train_data, test_data])
                         val_data = None
-                    self.fold.append((train_data, test_data, val_data))
+                    self.folds.append((train_data, test_data, val_data))
             else:
                 raise FileNotFoundError(
                     f'No train/test/val files found in {load_path}.')
@@ -261,20 +264,34 @@ def main():
     pseudopath = 'imaginary_file.jsonl'
     # my_datahanlder = DataHandler(pseudopath)
 
+    # Test stratified split
     # train, test, val = my_datahanlder.stratified_split()
     # my_datahanlder.save_split('./data/annotated_data/test_split')
     # my_second_datahandler = DataHandler()
     # my_second_datahandler.load_splits('./data/annotated_data/test_split')
     # train, test, val = my_second_datahandler.get_strat_split()
    
+    # Test stratified with val split
+    # datahandler = DataHandler()
+    # train, test, val = datahandler.get_strat_split(train_size=0.6, use_val=True)
+    # datahandler.save_split('./data/annotated_data/test_split')
+    # my_second_datahandler = DataHandler()
+    # my_second_datahandler.load_splits('./data/annotated_data/test_split')
+    # train, test, val = my_second_datahandler.get_strat_split(use_val=True)
     
-    datahandler = DataHandler()
-    train, test, val = datahandler.get_strat_split(train_size=0.6, use_val=True)
-    datahandler.save_split('./data/annotated_data/test_split')
-    my_second_datahandler = DataHandler()
-    my_second_datahandler.load_splits('./data/annotated_data/test_split')
-    train, test, val = my_second_datahandler.get_strat_split(use_val=True)
-    print('blibal')
+    # Test k-fold split
+    # dataHandler = DataHandler()
+    # dataHandler.get_strat_k_fold_split()
+    # dataHandler.save_split('./data/annotated_data/test_split')
+    # my_second_datahandler = DataHandler()
+    # my_second_datahandler.load_splits('./data/annotated_data/test_split')
+    
+    # Test k-fold split with val
+    # dataHandler = DataHandler()
+    # dataHandler.get_strat_k_fold_split(use_val=True)
+    # dataHandler.save_split('./data/annotated_data/test_split')
+    # my_second_datahandler = DataHandler()
+    # my_second_datahandler.load_splits('./data/annotated_data/test_split')
     
 
 
