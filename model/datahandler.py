@@ -363,11 +363,15 @@ class DummyDataHandler(DataHandler):
             left, _ = first_line.split(self.LABEL_COL)
             delimiter = left[-1]
         df = pd.read_csv(data_path, delimiter=delimiter)
-        # check if [ in labels --> make list
-        if '[' in df[self.LABEL_COL].iloc[0]:
-            df[self.LABEL_COL] = df[self.LABEL_COL].apply(
-                lambda x: x.strip('][').split(', ')
-            )
+        try: 
+            # check if [ in labels --> make list
+            if '[' in df[self.LABEL_COL].iloc[0]:
+                df[self.LABEL_COL] = df[self.LABEL_COL].apply(
+                    lambda x: x.strip('][').split(', ')
+                )
+        except TypeError:
+            pass
+            
         return df
 
 
