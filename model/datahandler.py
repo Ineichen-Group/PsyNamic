@@ -19,6 +19,7 @@ np.random.seed(SEED)
 
 
 class DataSplit(Dataset):
+    "PyTorch Dataset class for a given data split."
     ID_COL = 'id'
     TEXT_COL = 'text'
     LABEL_COL = 'labels'
@@ -33,11 +34,11 @@ class DataSplit(Dataset):
     def __getitem__(self, idx: int) -> dict:
         text = self.df.iloc[idx][self.TEXT_COL]
         labels = self.df.iloc[idx][self.LABEL_COL]
-        
+
         # in case of multilabel classification, convert labels to tensor
         if isinstance(labels, list):
             labels = torch.tensor(labels)
-        
+
         return {self.TEXT_COL: text, self.LABEL_COL: labels}
 
     def __eq__(self, other) -> bool:
@@ -64,11 +65,14 @@ class DataSplit(Dataset):
 
 
 class DataHandler():
+    """ Abstract DataHandler class to handle data loading, preprocessing and splitting.
+        Idea: Inherit from this class and implement the abstract methods to create a DataHandler for a specific dataset.
+    """
     ID_COL = 'id'
     TEXT_COL = 'text'
     LABEL_COL = 'labels'
 
-    def __init__(self, data_path: str = None, nr_classes: int = None, is_multilabel: bool = None, int_to_label: dict = None) -> None:
+    def __init__(self, data_path: str = None, nr_classes: int = None, is_multilabel: bool = None) -> None:
         if data_path:
             self.df = self.read_in_data(data_path)
         else:
@@ -76,7 +80,6 @@ class DataHandler():
 
         self.is_multilabel = is_multilabel if is_multilabel else self._check_if_multilabel()
         self.nr_classes = nr_classes if nr_classes else self._determine_nr_classes()
-        self.int_to_label = int_to_label
 
         self.train = None
         self.test = None
@@ -90,7 +93,8 @@ class DataHandler():
 
     def _determine_nr_classes(self) -> int:
         """ 
-        Determine the number of classes in the dataset. In case of multilabel classification, return the number of labels and not combinations of labels."""
+        Determine the number of classes in the dataset. In case of multilabel classification, return the number of labels and not combinations of labels.
+        """
         if self.is_multilabel:
             return len(self.df[self.LABEL_COL].iloc[0])
         else:
@@ -100,11 +104,8 @@ class DataHandler():
         return any(isinstance(label, list) for label in self.df[self.LABEL_COL])
 
     def _check_presence_of_labels(self, datasplit: pd.DataFrame) -> bool:
-        if self.is_multilabel:
-            raise NotImplementedError(
-                'Multilabel classification not implemented yet.')
-        else:
-            return self.nr_classes == len(datasplit[self.LABEL_COL].unique())
+        """ Check if all labels are present in a given datasplit; used for sanity checkking during splitting."""
+        return self.nr_classes == len(datasplit[self.LABEL_COL].unique())
 
     def get_strat_split(self, train_size: float = 0.8, use_val: bool = False, seed: int = SEED) -> tuple[DataSplit, DataSplit, Union[DataSplit, None]]:
         """ Get stratified split of the data, with an optional validation set.
@@ -120,7 +121,7 @@ class DataHandler():
         def reuse():
             if self.train is None:
                 return False
-            # Check if the split with the same parameters has already been created
+            # Check if the split with the same parameters has already been created, if so, return the split (saves compute time)
             elif self.train is not None and self.test is not None and self.use_val == use_val and self.train_size == train_size:
                 return True
             else:
@@ -140,7 +141,7 @@ class DataHandler():
             X = self.df[self.TEXT_COL].values.tolist()
             y = self.df[self.LABEL_COL].values.tolist()
             if use_val:
-                # First split: train (60%) and remaining (40%)
+                # First split: train (e.g. 60%) and remaining (e.g. 40%)
                 msss1 = MultilabelStratifiedShuffleSplit(
                     n_splits=1, test_size=1-train_size, random_state=SEED)
                 train_index, remaining_index = next(msss1.split(X, y))
@@ -155,6 +156,7 @@ class DataHandler():
                 val_df = remaining_df.iloc[val_index]
                 test_df = remaining_df.iloc[test_index]
 
+                # Save splits to avoid recomputation
                 self.train = train_df
                 self.val = val_df
                 self.test = test_df
@@ -166,13 +168,14 @@ class DataHandler():
                 train_index, test_index = next(msss.split(X, y))
                 train_df = self.df.iloc[train_index]
                 test_df = self.df.iloc[test_index]
+                # Save splits to avoid recomputation
                 self.train = train_df
                 self.test = test_df
 
                 return DataSplit(train_df), DataSplit(test_df), None
         else:
             if use_val:
-                # First split: train (60%) and remaining (40%)
+                # First split: train (e.g. 60%) and remaining (e.g. 40%)
                 split = StratifiedShuffleSplit(
                     n_splits=1, train_size=train_size, test_size=1-train_size, random_state=SEED)
                 train_idx, remaining_idx = next(
@@ -180,7 +183,7 @@ class DataHandler():
                 train_df = self.df.iloc[train_idx]
                 remaining_df = self.df.iloc[remaining_idx]
 
-                # Second split: remaining (40%) into val (20%) and test (20%)
+                # Second split: remaining (e.g. 40%) into val (20%) and test (e.g. 20%)
                 val_test_split = StratifiedShuffleSplit(
                     n_splits=1, train_size=0.5, test_size=0.5, random_state=SEED)
                 val_idx, val_idx = next(val_test_split.split(
@@ -189,13 +192,13 @@ class DataHandler():
                 test_df = remaining_df.iloc[val_idx]
                 if not (self._check_presence_of_labels(train_df) and self._check_presence_of_labels(val_df) and self._check_presence_of_labels(test_df)):
                     raise ValueError(
-                        'Not all labels are present in the train, val and test set.')
+                        'Not all labels are present in the train, val and test set; data set might be too small or there is an error in the code.')
                 self.train = train_df
                 self.val = val_df
                 self.test = test_df
                 return DataSplit(train_df), DataSplit(test_df), DataSplit(val_df)
             else:
-                # Direct split: train (80%) and test (20%)
+                # Direct split: train (e.g. 80%) and test (e.g. 20%)
                 split = StratifiedShuffleSplit(
                     n_splits=1, train_size=train_size, random_state=SEED)
                 train_idx, val_idx = next(split.split(
@@ -207,12 +210,12 @@ class DataHandler():
 
                 if not (self._check_presence_of_labels(train_df) and self._check_presence_of_labels(test_df)):
                     raise ValueError(
-                        'Not all labels are present in the train and test set.')
+                        'Not all labels are present in the train and test set; data set might be too small or there is an error in the code.')
 
                 return DataSplit(train_df), DataSplit(test_df), None
 
     def get_strat_k_fold_split(self, train_size: float = 0.8, n_splits: int = 5, seed: int = SEED) -> tuple[Iterable[tuple[DataSplit, DataSplit]], DataSplit]:
-        """ Get stratified k-fold split of the data.
+        """ Get stratified k-fold split of the data; i.e. n splits into train and validation set, with a test set.
 
         Args:
             train_size (float, optional): Size of the training set. Defaults to 0.8.
@@ -256,26 +259,31 @@ class DataHandler():
             return folds, test_split
 
     def save_split(self, save_path: str) -> None:
+        """ Save the train, test and validation splits to a given path as csv files.
+        """
         if not path.exists(save_path):
             raise FileNotFoundError(f'Path {save_path} does not exist.')
         if self.folds:
             for i, fold in enumerate(self.folds):
-                fold[0].to_csv(f'{save_path}/train_fold_{i}.csv')
-                fold[1].to_csv(f'{save_path}/test_fold_{i}.csv')
+                fold[0].to_csv(f'{save_path}/train_fold_{i}.csv', index=False)
+                fold[1].to_csv(f'{save_path}/test_fold_{i}.csv', index=False)
                 try:
                     fold[2].to_csv(
-                        f'{save_path}/val_fold_{i}.csv')
+                        f'{save_path}/val_fold_{i}.csv', index=False)
                 except AttributeError:
                     pass
         else:
-            self.train.to_csv(path.join(save_path, 'train.csv'))
-            self.test.to_csv(path.join(save_path, 'test.csv'))
+            self.train.to_csv(path.join(save_path, 'train.csv'), index=False)
+            self.test.to_csv(path.join(save_path, 'test.csv'), index=False)
             try:
-                self.val.to_csv(path.join(save_path, 'val.csv'))
+                self.val.to_csv(path.join(save_path, 'val.csv'), index=False)
             except AttributeError:
                 pass
 
     def load_splits(self, load_path: str) -> None:
+        """ Load train, test and validation splits from a given path.
+            To get the usable splits, call get_strat_split() or get_strat_k_fold_split() after loading the splits.
+        """
         if not path.exists(load_path):
             raise FileNotFoundError(f'Path {load_path} does not exist.')
 
@@ -323,15 +331,24 @@ class DataHandler():
                     f'No train/test/val files found in {load_path}.')
 
     @abstractmethod
-    def preprocess(self) -> None:
-        pass
-
-    @abstractmethod
     def read_in_data(self, data_path: str) -> pd.DataFrame:
+        """ Read in the data from a given path and return a pandas DataFrame, with columns 'id', 'text' and 'labels'. 
+            In case of multilabel classification, 'labels' should be a list of one-hot encoded labels:  
+            e.g.    id                      2439
+                    text           "I am a text"
+                    labels             [0, 1, 0]
+
+            In case of single label classification, 'labels' should be an integer:
+            e.g.    id                      2439
+                    text           "I am a text"
+                    labels                     2
+
+            """
         pass
 
     @property
     def labels(self) -> list[int]:
+        """ Return the unique labels in the dataset."""
         if self.is_multilabel:
             label_tuples = self.df['labels'].apply(tuple)
             unique_labels = set(label_tuples)
@@ -342,17 +359,25 @@ class DataHandler():
             return label_list
 
 
-class PsychNamicDataHandler(DataHandler):
+class PsyNamic1vsAll(DataHandler):
 
-    def __init__(self, data: pd.DataFrame, label: str) -> None:
-        pass
-
-    def preprocess(self) -> None:
-        pass
+    def __init__(self, data_path: str, relevant_class: str,  nr_classes: int = None, is_multilabel: bool = None, int_to_label: dict = None) -> None:
+        super().__init__(data_path, nr_classes, is_multilabel, int_to_label)
+        self.relevant_class = relevant_class
 
     def read_in_data(self, data_path: str) -> pd.DataFrame:
         pass
 
+
+class PsychNamicBIOHandler(DataHandler):
+    pass
+    
+    def read_in_data(self, data_path: str) -> pd.DataFrame:
+        pass
+
+
+class PsychNamicRelevant(DataHandler):
+    pass
 
 class DummyDataHandler(DataHandler):
     def read_in_data(self, data_path: str) -> pd.DataFrame:
@@ -363,15 +388,15 @@ class DummyDataHandler(DataHandler):
             left, _ = first_line.split(self.LABEL_COL)
             delimiter = left[-1]
         df = pd.read_csv(data_path, delimiter=delimiter)
-        try: 
-            # check if [ in labels --> make list
+        # check if [ in labels --> make list
+        try:
             if '[' in df[self.LABEL_COL].iloc[0]:
                 df[self.LABEL_COL] = df[self.LABEL_COL].apply(
                     lambda x: x.strip('][').split(', ')
                 )
         except TypeError:
             pass
-            
+
         return df
 
 

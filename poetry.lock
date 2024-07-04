@@ -359,6 +359,22 @@ files = [
 ]
 
 [[package]]
+name = "iterative-stratification"
+version = "0.1.7"
+description = "Package that provides scikit-learn compatible cross validators with stratification for multilabel data"
+optional = false
+python-versions = "*"
+files = [
+    {file = "iterative-stratification-0.1.7.tar.gz", hash = "sha256:c0eec73192e837d5c153e92e9bfb5ea99c29fea2f7dfe11031b867abe6209f70"},
+    {file = "iterative_stratification-0.1.7-py3-none-any.whl", hash = "sha256:4218ed1e30608cc3c0b1105ceab878f6277a2dc79a0a635d6a9745635036e8e7"},
+]
+
+[package.dependencies]
+numpy = "*"
+scikit-learn = "*"
+scipy = "*"
+
+[[package]]
 name = "jinja2"
 version = "3.1.4"
 description = "A very fast and expressive template engine."
@@ -1516,4 +1532,4 @@ zstd = ["zstandard (>=0.18.0)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "78f51ebe0581b4d338891a1b2abff13ae169bf9dd9fb706bd7b7d1d26d62eb04"
+content-hash = "ae16da335d08db68abb688840108da744ac4c39fa6f46ed9f11b6b546f565c03"
