@@ -3,6 +3,7 @@ from prodigy_data_reader import ProdigyDataCollector
 
 def descriptive_analysis(list_jsonl: str):
     prodigy_data = ProdigyDataCollector(list_jsonl)
+    print(f'Total number: {len(prodigy_data)}, rejected: {prodigy_data.nr_rejected}')
     prodigy_data.visualize_dist()
     prodigy_data.visualize_dist('Study Type')
     prodigy_data.visualize_nr_dist()
@@ -13,7 +14,8 @@ def descriptive_analysis(list_jsonl: str):
 def main():
     list_jsonl = [
         'data/prodigy_exports/prodigy_export_ben_95_20240423_113434.jsonl',
-        'data/prodigy_exports/prodigy_export_iaa_ben_40_20240523_20240604_094449_reordered.jsonl',
+        'data/iaa/iaa_round1_50/iaa_resolution/prodigy_export_review_all_text_50_20240418_review_20240607_145354.jsonl',
+        'data/prodigy_exports/prodigy_export_ben_24_20240425_152801.jsonl'
     ]
     descriptive_analysis(list_jsonl)
 

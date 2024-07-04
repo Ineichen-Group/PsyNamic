@@ -28,6 +28,7 @@ class ProdigyDataReader:
         self._check_path()
 
         self.span_labels = set()
+        self.nr_rejected = 0
         self._tasks = {}
         self._thematic_split = None
 
@@ -232,8 +233,8 @@ class ProdigyDataReader:
         all_rows = []
         with open(self.jsonl_path, 'r', encoding='utf-8') as infile:
             lines = []
-            for line_dict in infile:
-                line_dict = json.loads(line_dict)
+            for line in infile:
+                line_dict = json.loads(line)
                 lines.append(line_dict)
                 # keep collecting all information until the next abstract
                 if self.has_thematic_split():
@@ -273,10 +274,11 @@ class ProdigyDataReader:
                     raise ValueError(
                         f'Same abstract was accepted and rejected {rejected[0]}')
 
-                all_rows.append(new_row)
                 if rejected:
                     self.rejected.append(rejected[0])
-
+                    self.nr_rejected += 1
+                else:
+                    all_rows.append(new_row)
                 # reset for next abstract
                 lines = []
                 rejected = []
@@ -288,10 +290,12 @@ class ProdigyDataReader:
     def _read_all_ner(self) -> None:
         with open(self.jsonl_path, 'r', encoding='utf-8') as infile:
             for line in infile:
-                data = json.loads(line)
-                tokens = data['tokens']
-                spans = data['spans']
-                id = data['record_id']
+                line_dict = json.loads(line)
+                if line_dict['answer'] == 'reject':
+                    continue
+                tokens = line_dict['tokens']
+                spans = line_dict['spans']
+                id = line_dict['record_id']
                 # check if id already exists
                 for span in spans:
                     if 'label' in span.keys():
@@ -412,6 +416,10 @@ class ProdigyDataCollector():
     def _check_duplicates(self) -> None:
         if self.df.duplicated(subset='id').any():
             raise ValueError('Duplicates in the data')
+
+    @property
+    def nr_rejected(self) -> int:
+        return sum([reader.nr_rejected for reader in self.prodigy_readers])
 
     def visualize_dist(self, x_label: str = None, save_path: str = None) -> None:
         if x_label is None:
