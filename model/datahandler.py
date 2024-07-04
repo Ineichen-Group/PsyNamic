@@ -8,6 +8,7 @@ import pandas as pd
 import torch
 from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 from torch.utils.data import Dataset
+from iterstrat.ml_stratifiers import MultilabelStratifiedKFold, MultilabelStratifiedShuffleSplit
 
 # Fix the random seed for reproducibility
 SEED = 42
@@ -22,8 +23,9 @@ class DataSplit(Dataset):
     TEXT_COL = 'text'
     LABEL_COL = 'labels'
 
-    def __init__(self, split: pd.DataFrame) -> None:
+    def __init__(self, split: pd.DataFrame, multilabel: bool = False) -> None:
         self.df = split
+        self.is_multilabel = multilabel
 
     def __len__(self) -> int:
         return len(self.df)
@@ -31,10 +33,34 @@ class DataSplit(Dataset):
     def __getitem__(self, idx: int) -> dict:
         text = self.df.iloc[idx][self.TEXT_COL]
         labels = self.df.iloc[idx][self.LABEL_COL]
+        
+        # in case of multilabel classification, convert labels to tensor
+        if isinstance(labels, list):
+            labels = torch.tensor(labels)
+        
         return {self.TEXT_COL: text, self.LABEL_COL: labels}
-    
+
+    def __eq__(self, other) -> bool:
+        if not isinstance(other, DataSplit):
+            return False
+        return self.df.equals(other.df)
+
+    def __repr__(self) -> str:
+        return f"DataSplit(num_samples={len(self.df)}, labels={self.labels})"
+
     def to_csv(self, save_path: str) -> None:
         self.df.to_csv(save_path, index=False)
+
+    @property
+    def labels(self) -> list[int]:
+        if self.is_multilabel:
+            label_tuples = self.df['labels'].apply(tuple)
+            unique_labels = set(label_tuples)
+            return list(unique_labels)
+        else:
+            label_list = self.df[self.LABEL_COL].unique().tolist()
+            label_list.sort()
+            return label_list
 
 
 class DataHandler():
@@ -47,18 +73,7 @@ class DataHandler():
             self.df = self.read_in_data(data_path)
         else:
             self.df = None
-        # Create a dummy df for testing, with three columns: id, text, labels and 3 dummy rows
-        # Generate dummy data
-        data = {
-            self.ID_COL: list(range(1, 61)),  # IDs from 1 to 20
-            self.TEXT_COL: [
-                'Text number {}'.format(i) for i in range(1, 61)
-            ],  # Texts with placeholder numbers
-            # Randomly select labels 0, 1, or 2
-            self.LABEL_COL: np.random.choice([0, 1, 2], size=60)
-        }
 
-        self.df = pd.DataFrame(data)
         self.is_multilabel = is_multilabel if is_multilabel else self._check_if_multilabel()
         self.nr_classes = nr_classes if nr_classes else self._determine_nr_classes()
         self.int_to_label = int_to_label
@@ -67,14 +82,17 @@ class DataHandler():
         self.test = None
         self.val = None
         self.folds = []
+        self.train_size = None
+        self.use_val = None
 
     def __len__(self) -> int:
         return len(self.df)
 
     def _determine_nr_classes(self) -> int:
+        """ 
+        Determine the number of classes in the dataset. In case of multilabel classification, return the number of labels and not combinations of labels."""
         if self.is_multilabel:
-            raise NotImplementedError(
-                'Multilabel classification not implemented yet.')
+            return len(self.df[self.LABEL_COL].iloc[0])
         else:
             return len(self.df[self.LABEL_COL].unique())
 
@@ -88,15 +106,72 @@ class DataHandler():
         else:
             return self.nr_classes == len(datasplit[self.LABEL_COL].unique())
 
-    def get_strat_split(self, train_size: float = 0.8, use_val: bool = False, resplit: bool = False) -> tuple[DataSplit, DataSplit, Union[DataSplit, None]]:
+    def get_strat_split(self, train_size: float = 0.8, use_val: bool = False, seed: int = SEED) -> tuple[DataSplit, DataSplit, Union[DataSplit, None]]:
+        """ Get stratified split of the data, with an optional validation set.
+
+        Args:
+            train_size (float, optional): Size of the training set. Defaults to 0.8.
+            use_val (bool, optional): Whether to use a validation set. Defaults to False.
+            seed (int, optional): Random seed. Defaults to SEED.
+
+        Returns:
+            tuple[DataSplit, DataSplit, Union[DataSplit, None]]: Train, test and validation set. Validation set is None if use_val is False.
+        """
+        def reuse():
+            if self.train is None:
+                return False
+            # Check if the split with the same parameters has already been created
+            elif self.train is not None and self.test is not None and self.use_val == use_val and self.train_size == train_size:
+                return True
+            else:
+                return False
+
+        if reuse():
+            if use_val:
+                return DataSplit(self.train), DataSplit(self.test), DataSplit(self.val)
+            else:
+                return DataSplit(self.train), DataSplit(self.test), None
+        else:
+            self.train_size = train_size
+            self.use_val = use_val
+
         if self.is_multilabel:
-            raise NotImplementedError(
-                'Multilabel stratified split not implemented yet.')
+            # convert df into np array
+            X = self.df[self.TEXT_COL].values.tolist()
+            y = self.df[self.LABEL_COL].values.tolist()
+            if use_val:
+                # First split: train (60%) and remaining (40%)
+                msss1 = MultilabelStratifiedShuffleSplit(
+                    n_splits=1, test_size=1-train_size, random_state=SEED)
+                train_index, remaining_index = next(msss1.split(X, y))
+                train_df = self.df.iloc[train_index]
+                remaining_df = self.df.iloc[remaining_index]
+
+                # Second split: remaining (40%) into val (20%) and test (20%)
+                msss2 = MultilabelStratifiedShuffleSplit(
+                    n_splits=1, test_size=0.5, random_state=SEED)
+                val_index, test_index = next(msss2.split(
+                    remaining_df[self.TEXT_COL].values, np.array(remaining_df[self.LABEL_COL].tolist())))
+                val_df = remaining_df.iloc[val_index]
+                test_df = remaining_df.iloc[test_index]
+
+                self.train = train_df
+                self.val = val_df
+                self.test = test_df
+                return DataSplit(train_df), DataSplit(test_df), DataSplit(val_df)
+
+            else:
+                msss = MultilabelStratifiedShuffleSplit(
+                    n_splits=1, test_size=1-train_size, random_state=SEED)
+                train_index, test_index = next(msss.split(X, y))
+                train_df = self.df.iloc[train_index]
+                test_df = self.df.iloc[test_index]
+                self.train = train_df
+                self.test = test_df
+
+                return DataSplit(train_df), DataSplit(test_df), None
         else:
             if use_val:
-                if self.train is not None and not resplit:
-                    return DataSplit(self.train), DataSplit(self.test), DataSplit(self.val)
-
                 # First split: train (60%) and remaining (40%)
                 split = StratifiedShuffleSplit(
                     n_splits=1, train_size=train_size, test_size=1-train_size, random_state=SEED)
@@ -108,10 +183,10 @@ class DataHandler():
                 # Second split: remaining (40%) into val (20%) and test (20%)
                 val_test_split = StratifiedShuffleSplit(
                     n_splits=1, train_size=0.5, test_size=0.5, random_state=SEED)
-                val_idx, test_idx = next(val_test_split.split(
+                val_idx, val_idx = next(val_test_split.split(
                     remaining_df, remaining_df[self.LABEL_COL]))
                 val_df = remaining_df.iloc[val_idx]
-                test_df = remaining_df.iloc[test_idx]
+                test_df = remaining_df.iloc[val_idx]
                 if not (self._check_presence_of_labels(train_df) and self._check_presence_of_labels(val_df) and self._check_presence_of_labels(test_df)):
                     raise ValueError(
                         'Not all labels are present in the train, val and test set.')
@@ -120,16 +195,13 @@ class DataHandler():
                 self.test = test_df
                 return DataSplit(train_df), DataSplit(test_df), DataSplit(val_df)
             else:
-                if self.train is not None and not resplit:
-                    return DataSplit(self.train), DataSplit(self.test), None
-
                 # Direct split: train (80%) and test (20%)
                 split = StratifiedShuffleSplit(
                     n_splits=1, train_size=train_size, random_state=SEED)
-                train_idx, test_idx = next(split.split(
+                train_idx, val_idx = next(split.split(
                     self.df, self.df[self.LABEL_COL]))
                 train_df = self.df.iloc[train_idx]
-                test_df = self.df.iloc[test_idx]
+                test_df = self.df.iloc[val_idx]
                 self.train = train_df
                 self.test = test_df
 
@@ -139,38 +211,49 @@ class DataHandler():
 
                 return DataSplit(train_df), DataSplit(test_df), None
 
-    def get_strat_k_fold_split(self, train_size: float = 0.8, n_splits: int = 5, use_val: bool = False) -> Iterable[tuple[DataSplit, DataSplit, Union[DataSplit, None]]]:
+    def get_strat_k_fold_split(self, train_size: float = 0.8, n_splits: int = 5, seed: int = SEED) -> tuple[Iterable[tuple[DataSplit, DataSplit]], DataSplit]:
+        """ Get stratified k-fold split of the data.
+
+        Args:
+            train_size (float, optional): Size of the training set. Defaults to 0.8.
+            n_splits (int, optional): Number of splits. Defaults to 5.
+            seed (int, optional): Random seed. Defaults to SEED.
+
+        Returns:
+            tuple[Iterable[tuple[DataSplit, DataSplit]], DataSplit]: Iterable of k-folds and test split.
+        """
+        train_split, test_split, _ = self.get_strat_split(
+            train_size=train_size)
 
         if self.is_multilabel:
-            raise NotImplementedError(
-                'Multilabel stratified split not implemented yet.')
-        else:
-            # Check if the folds have already been created, if so return them
-            if self.folds:
-                return self.folds
+            mskf = MultilabelStratifiedKFold(
+                n_splits=n_splits, shuffle=True, random_state=SEED)
+            folds = []
+            X = train_split.df[self.TEXT_COL].values
+            y = np.array(train_split.df[self.LABEL_COL].tolist())
 
+            for train_idx, val_idx in mskf.split(X, y):
+                train_df = train_split.df.iloc[train_idx]
+                val_df = train_split.df.iloc[val_idx]
+                folds.append(
+                    (DataSplit(train_df), DataSplit(val_df)))
+
+            self.folds = folds
+            return folds, test_split
+
+        else:
             skf = StratifiedKFold(
                 n_splits=n_splits, shuffle=True, random_state=SEED)
             folds = []
-            for train_idx, test_idx in skf.split(self.df, self.df[self.LABEL_COL]):
-                train_df = self.df.iloc[train_idx]
-                test_df = self.df.iloc[test_idx]
+            for train_idx, val_idx in skf.split(train_split.df, train_split.df[self.LABEL_COL]):
+                train_df = train_split.df.iloc[train_idx]
+                val_df = train_split.df.iloc[val_idx]
 
-                if use_val:
-                    # Split train_df into actual train and validation
-                    train_val_split = StratifiedShuffleSplit(
-                        n_splits=1, train_size=train_size, test_size=1-train_size, random_state=SEED)
-                    actual_train_idx, val_idx = next(
-                        train_val_split.split(train_df, train_df[self.LABEL_COL]))
-                    actual_train_df = train_df.iloc[actual_train_idx]
-                    val_df = train_df.iloc[val_idx]
-                    folds.append((DataSplit(actual_train_df),
-                                 DataSplit(test_df), DataSplit(val_df)))
-                else:
-                    folds.append((DataSplit(train_df), DataSplit(test_df), None))
+                folds.append(
+                    (DataSplit(train_df), DataSplit(val_df)))
 
             self.folds = folds
-            return folds
+            return folds, test_split
 
     def save_split(self, save_path: str) -> None:
         if not path.exists(save_path):
@@ -247,6 +330,17 @@ class DataHandler():
     def read_in_data(self, data_path: str) -> pd.DataFrame:
         pass
 
+    @property
+    def labels(self) -> list[int]:
+        if self.is_multilabel:
+            label_tuples = self.df['labels'].apply(tuple)
+            unique_labels = set(label_tuples)
+            return list(unique_labels)
+        else:
+            label_list = self.df[self.LABEL_COL].unique().tolist()
+            label_list.sort()
+            return label_list
+
 
 class PsychNamicDataHandler(DataHandler):
 
@@ -260,39 +354,57 @@ class PsychNamicDataHandler(DataHandler):
         pass
 
 
+class DummyDataHandler(DataHandler):
+    def read_in_data(self, data_path: str) -> pd.DataFrame:
+        # check if file is delimited by comma or semicolon
+        with open(data_path, 'r') as f:
+            first_line = f.readline()
+            # check what character is before "labels"
+            left, _ = first_line.split(self.LABEL_COL)
+            delimiter = left[-1]
+        df = pd.read_csv(data_path, delimiter=delimiter)
+        # check if [ in labels --> make list
+        if '[' in df[self.LABEL_COL].iloc[0]:
+            df[self.LABEL_COL] = df[self.LABEL_COL].apply(
+                lambda x: x.strip('][').split(', ')
+            )
+        return df
+
+
 def main():
     pseudopath = 'imaginary_file.jsonl'
     # my_datahanlder = DataHandler(pseudopath)
 
     # Test stratified split
-    # train, test, val = my_datahanlder.stratified_split()
-    # my_datahanlder.save_split('./data/annotated_data/test_split')
-    # my_second_datahandler = DataHandler()
-    # my_second_datahandler.load_splits('./data/annotated_data/test_split')
-    # train, test, val = my_second_datahandler.get_strat_split()
-   
+    my_datahandler = DataHandler()
+    train, test, val = my_datahandler.get_strat_split()
+    my_datahandler.save_split('./data/annotated_data/test_split')
+    my_second_datahandler = DataHandler()
+    my_second_datahandler.load_splits('./data/annotated_data/test_split')
+    train, test, val = my_second_datahandler.get_strat_split()
+
     # Test stratified with val split
-    # datahandler = DataHandler()
-    # train, test, val = datahandler.get_strat_split(train_size=0.6, use_val=True)
-    # datahandler.save_split('./data/annotated_data/test_split')
-    # my_second_datahandler = DataHandler()
-    # my_second_datahandler.load_splits('./data/annotated_data/test_split')
-    # train, test, val = my_second_datahandler.get_strat_split(use_val=True)
-    
+    datahandler = DataHandler()
+    train, test, val = datahandler.get_strat_split(
+        train_size=0.6, use_val=True)
+    datahandler.save_split('./data/annotated_data/test_split')
+    my_second_datahandler = DataHandler()
+    my_second_datahandler.load_splits('./data/annotated_data/test_split')
+    train, test, val = my_second_datahandler.get_strat_split(use_val=True)
+
     # Test k-fold split
-    # dataHandler = DataHandler()
-    # dataHandler.get_strat_k_fold_split()
-    # dataHandler.save_split('./data/annotated_data/test_split')
-    # my_second_datahandler = DataHandler()
-    # my_second_datahandler.load_splits('./data/annotated_data/test_split')
-    
+    dataHandler = DataHandler()
+    dataHandler.get_strat_k_fold_split()
+    dataHandler.save_split('./data/annotated_data/test_split')
+    my_second_datahandler = DataHandler()
+    my_second_datahandler.load_splits('./data/annotated_data/test_split')
+
     # Test k-fold split with val
-    # dataHandler = DataHandler()
-    # dataHandler.get_strat_k_fold_split(use_val=True)
-    # dataHandler.save_split('./data/annotated_data/test_split')
-    # my_second_datahandler = DataHandler()
-    # my_second_datahandler.load_splits('./data/annotated_data/test_split')
-    
+    dataHandler = DataHandler()
+    dataHandler.get_strat_k_fold_split(use_val=True)
+    dataHandler.save_split('./data/annotated_data/test_split')
+    my_second_datahandler = DataHandler()
+    my_second_datahandler.load_splits('./data/annotated_data/test_split')
 
 
 if __name__ == '__main__':

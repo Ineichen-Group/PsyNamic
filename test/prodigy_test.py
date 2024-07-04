@@ -2,6 +2,7 @@ import os
 import unittest
 import pandas as pd
 from data.prodigy_data_reader import *
+from model.datahandler import DummyDataHandler
 
 # Run single test:
 # python -m unittest test.prodigy_test.TestParseProdigyData.test_get_classification_tasks
@@ -170,6 +171,119 @@ class TestParseProdigyData(unittest.TestCase):
         ners = self.prodigy_reader.get_ner_per_abstract(4786)
         ners_expected = [('2 mg', 'Dosage')]
         self.assertEqual(ners, ners_expected)
+
+
+class TestDataHandler(unittest.TestCase):
+
+    def setUp(self):
+        self.relative_path = os.path.dirname(__file__)
+        self.singlelable = os.path.join(
+            self.relative_path, 'test_data/dummy_data.csv')
+        self.multilabel = os.path.join(
+            self.relative_path, 'test_data/dummy_data_multilabel.csv')
+
+    def test_strat_single_label_split(self):
+        dh = DummyDataHandler(self.singlelable)
+        self.assertEqual(dh.nr_classes, 3)
+        self.assertEqual(dh.df.shape[0], 60)
+        self.assertEqual(dh.is_multilabel, False)
+
+        train, test, _ = dh.get_strat_split(train_size=0.8)
+
+        self.assertEqual(len(train), 48)
+        self.assertEqual(len(test), 12)
+        # check if the labels are the same
+        labels = [0, 1, 2]
+        self.assertEqual(train.labels, labels)
+        self.assertEqual(train.labels, labels)
+        self.assertEqual(dh.labels, labels)
+
+        # Test if the split is reproducible
+        train2, test2, _ = dh.get_strat_split(train_size=0.8)
+        # splits should be the same if the parameters are the same
+        self.assertEqual(train, train2)
+        
+        # Test with different train size
+        train3, test3, _ = dh.get_strat_split(train_size=0.6)
+        self.assertEqual(len(train3), 36)
+        self.assertEqual(len(test3), 24)
+        self.assertEqual(train3.labels, labels)
+        self.assertEqual(test3.labels, labels)
+        
+        # Test with dev set
+        train, test, dev = dh.get_strat_split(train_size=0.6, use_val=True)
+        self.assertEqual(len(train), 36)
+        self.assertEqual(len(test), 12)
+        self.assertEqual(len(dev), 12)
+        self.assertEqual(train.labels, labels)
+        self.assertEqual(test.labels, labels)
+        self.assertEqual(dev.labels, labels)
+        
+    def test_strat_single_label_kfold(self):
+        dh = DummyDataHandler(self.singlelable)
+
+        # Test with 5 splits, no validation set
+        kfolds, test_data = dh.get_strat_k_fold_split(n_splits=6)
+        
+        # Check if the splits are correct
+        self.assertEqual(len(test_data), 12)
+        labels = [0, 1, 2]
+        self.assertEqual(test_data.labels, labels)
+        self.assertEqual(dh.labels, labels)
+        # check size of kfolds
+        for train, val in kfolds:
+            self.assertEqual(len(train), 40)
+            self.assertEqual(len(val), 8)
+            self.assertEqual(train.labels, labels)
+            self.assertEqual(val.labels, labels)
+            
+        # Test with 10 splits, with validation set
+        kfolds, test_data = dh.get_strat_k_fold_split(n_splits=4, train_size=0.6)
+        
+        # Check if the splits are correct
+        self.assertEqual(len(test_data), 24)
+        labels = [0, 1, 2]
+        self.assertEqual(test_data.labels, labels)
+        
+        for train, val in kfolds:
+            self.assertEqual(len(train), 27)
+            self.assertEqual(len(val), 9)
+            self.assertEqual(train.labels, labels)
+            self.assertEqual(val.labels, labels)
+        
+    def test_strat_multilabel_split(self):
+        dh = DummyDataHandler(self.multilabel)
+        self.assertEqual(dh.is_multilabel, True)
+        self.assertEqual(dh.nr_classes, 5)
+
+        train, test, _ = dh.get_strat_split(train_size=0.8)
+        self.assertEqual(len(train), 48)
+        self.assertEqual(len(test), 12)
+        
+    def test_strat_multilabel_kfold(self):
+        dh = DummyDataHandler(self.multilabel)
+        self.assertEqual(dh.is_multilabel, True)
+        self.assertEqual(dh.nr_classes, 5)
+        
+        kfolds, test_data = dh.get_strat_k_fold_split(n_splits=4)
+        self.assertEqual(len(test_data), 12)
+        for train, val in kfolds:
+            self.assertEqual(len(train), 36)
+            self.assertEqual(len(val), 12)
+            
+        # Test with 10 splits, with validation set
+        kfolds, test_data = dh.get_strat_k_fold_split(n_splits=4, train_size=0.6)
+        
+        self.assertEqual(len(test_data), 24)        
+        for train, val in kfolds:
+            self.assertEqual(len(train), 27)
+            self.assertEqual(len(val), 9)
+            
+        
+
+        
+        
+        
 
 
 if __name__ == '__main__':

@@ -15,6 +15,7 @@ seaborn = "^0.13.2"
 nltk = "^3.8.1"
 stride-utils = {git = "https://github.com/Ineichen-Group/stride_utils.git", rev = "v0.6.2"}
 torch = "^2.3.1"
+iterative-stratification = "^0.1.7"
 [tool.poetry.group.dev.dependencies]
 pandas = "^2.2.2"
 
