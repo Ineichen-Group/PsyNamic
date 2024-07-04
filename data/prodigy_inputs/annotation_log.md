@@ -13,7 +13,7 @@
 | --------------- | ------------------------------------------------- | ----- | ----------- | ------------------------ | ----------------------- |
 | V4              | psychedelic_study_50_20240418                     | 50    | Done        | Ben, Pia, Julia, Bernard | x, x, x, x              |
 | V4              | psychedelic_study_100_20240418                    | 100   | Done        | Ben                      | x                       |
-| V4              | psychedelic_study_50_20240418_review              | 50    | Done        | Ben, Pia, Julia, Bernard |                         |
+| V4              | psychedelic_study_50_20240418_review              | 50    | Done        | Ben, Pia, Julia, Bernard | x                       |
 | -----------     | -----------                                       | ----- | ----------- | -----------              | -----------             |
 | V5              | psychedelic_study_250_20240423_113435.jsonl       | 250   | In Progress | Julia                    |
 | V5              | psychedelic_study_250_20240423_113436.jsonl       | 250   | In Progress | Bernard                  |
@@ -39,8 +39,8 @@ Notes:
 
 | Prodigy Version | Dataset                                     | Size | Annotator | Annotations Received |
 | --------------- | ------------------------------------------- | ---- | --------- | -------------------- |
-| V6              | psychedelic_study_250_20240425_134820.jsonl | 250  | Julia     |
-| V6              | psychedelic_study_250_20240425_134821.jsonl | 250  | Bernard   |
-| V6              | psychedelic_study_250_20240425_134822.jsonl | 250  | Pia       |
-| V6              | psychedelic_study_250_20240425_152801.jsonl | 250  | Ben       |
-| V6              | psychedelic_study_40_20240523_162946.jsonl  | 40   | Ben, Pia  |
+| V6              | psychedelic_study_250_20240425_134820.jsonl | 250  | Julia     |                      |
+| V6              | psychedelic_study_250_20240425_134821.jsonl | 250  | Bernard   |                      |
+| V6              | psychedelic_study_250_20240425_134822.jsonl | 250  | Pia       |                      |
+| V6              | psychedelic_study_250_20240425_152801.jsonl | 250  | Ben       |                      |
+| V6              | psychedelic_study_40_20240523_162946.jsonl  | 40   | Ben, Pia  |                      |
