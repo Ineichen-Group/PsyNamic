@@ -50,6 +50,7 @@ class ProdigyDataReader:
 
         self._read_all_class()
         self._read_all_ner()
+        self._task_multilabel = {}
 
     def __iter__(self):
         return self
@@ -161,7 +162,7 @@ class ProdigyDataReader:
             task_filtered_df = pd.DataFrame(task_filtered)
         return task_filtered_df
 
-    def get_label_task_df(self, task_name: str, label_to_int: None) -> tuple[dict, pd.DataFrame]:
+    def get_label_task_df(self, task_name: str, label_to_int: Union[dict[str], None] = None) -> tuple[dict, pd.DataFrame]:
         if self._is_valid_task(task_name):
             if label_to_int:
                 int_to_label = {index: label for index,
@@ -183,15 +184,14 @@ class ProdigyDataReader:
             for _, row in self.df.iterrows():
                 labels = []
                 for col in self.df.columns:
-                    if task_name in col:
+                    if col.startswith(task_name):
                         label = col.split(': ')[1]
                         if row[col] == 1:
                             labels.append(label_to_int[label])
                 task_filtered[task_name].append(labels)
 
-            new_datafame = pd.DataFrame(task_filtered)
-
-            return int_to_label, new_datafame
+            new_dataframe = pd.DataFrame(task_filtered)
+            return label_to_int, new_dataframe
 
     def get_ner_per_abstract(self, id: int, label: str = None) -> list[(str, str)]:
         ners = []
@@ -206,11 +206,17 @@ class ProdigyDataReader:
 
     def _is_task_multi_label(self, task_name: str) -> bool:
         if self._is_valid_task(task_name):
-            _, df = self.get_label_task_df(task_name)
-            for _, row in df.iterrows():
-                if len(row[task_name]) > 1:
-                    return True
-            return False
+            try:
+                return self._task_multilabel[task_name]
+            except KeyError:
+
+                _, df = self.get_label_task_df(task_name)
+                for _, row in df.iterrows():
+                    if len(row[task_name]) > 1:
+                        self._task_multilabel[task_name] = True
+                        return True
+                self._task_multilabel[task_name] = False
+                return False
 
     def _is_valid_task(self, task_name: str) -> Union[bool, None]:
         if not task_name in self.get_classification_tasks().keys():
@@ -443,7 +449,7 @@ class ProdigyDataCollector():
             for idx in range(num_tasks, len(axes)):
                 fig.delaxes(axes[idx])
 
-            plt.subplots_adjust(hspace=0.8, top=0.95, bottom=0.15)
+            plt.subplots_adjust(hspace=0.90, top=0.95, bottom=0.15)
 
             fig.suptitle('Overview of all Classification Tasks', fontsize=16)
 
@@ -492,13 +498,26 @@ class ProdigyDataCollector():
         else:
             return True
 
+    def is_multilabel(self, task_name: str) -> bool:
+        if self._is_valid_task(task_name):
+            for reader in self.prodigy_readers:
+                # if at least one reader has a multi-label task, return True
+                if reader._is_task_multi_label(task_name):
+                    return True
+            return False
+
     def get_label_task_df(self, task: str) -> pd.DataFrame:
         if self._is_valid_task(task):
             label_to_int, task_df = self.prodigy_readers[0].get_label_task_df(
                 task)
             for reader in self.prodigy_readers[1:]:
-                _, reader_task_df = reader.get_task_df(task, label_to_int)
+                _, reader_task_df = reader.get_label_task_df(
+                    task, label_to_int)
                 task_df = pd.concat([task_df, reader_task_df])
+
+            # TODO: Make more efficient
+            if not any(task_df[task].apply(len) > 1):
+                task_df[task] = task_df[task].apply(lambda x: x[0])
 
             return task_df
 
