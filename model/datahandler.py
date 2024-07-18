@@ -160,7 +160,6 @@ class DataHandler():
                 return True
             else:
                 return False
-
         if reuse():
             if use_val:
                 return DataSplit(self.train, self.id2label), DataSplit(self.test, self.id2label), DataSplit(self.val, self.id2label)
@@ -320,7 +319,6 @@ class DataHandler():
         """
         if not path.exists(load_path):
             raise FileNotFoundError(f'Path {load_path} does not exist.')
-
         train_path = path.join(load_path, 'train.csv')
         test_path = path.join(load_path, 'test.csv')
         val_path = path.join(load_path, 'val.csv')
