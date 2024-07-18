@@ -9,7 +9,9 @@ import time
 
 ANNOTATION_DIR = 'prodigy_inputs/annotation_logs/'
 PRODIGY_INPUTS_DIR = 'prodigy_inputs/'
-ANNOTATION_GROUPS = ['Study Characteristics', 'Substance(s)', 'Clinical Measure']
+ANNOTATION_GROUPS = ['Study Characteristics',
+                     'Substance(s)', 'Clinical Measure']
+
 
 def get_url(doi: str) -> str:
     """Get the link to pubmed of the article with the given DOI."""
@@ -112,23 +114,27 @@ def update_annotation_log(sample_file: str) -> None:
             record_id = json.loads(line)['record_id']
             # set annotated to True and add sample file name
             sample_file_name = os.path.basename(sample_file)
-            
+
             # check if record_id is already annotated
-            already_annotated = log_df.loc[log_df['record_id'] == record_id, 'annotated'].values[0]
-            dataset = log_df.loc[log_df['record_id'] == record_id, 'data_set'].values[0]
+            already_annotated = log_df.loc[log_df['record_id']
+                                           == record_id, 'annotated'].values[0]
+            dataset = log_df.loc[log_df['record_id']
+                                 == record_id, 'data_set'].values[0]
             if already_annotated and dataset != sample_file_name:
                 print(f'{record_id} already annotated by {dataset}')
                 doubled.append(record_id)
             else:
-                log_df.loc[log_df['record_id'] == record_id, 'data_set'] = sample_file_name
-                log_df.loc[log_df['record_id'] == record_id, 'annotated'] = True
+                log_df.loc[log_df['record_id'] == record_id,
+                           'data_set'] = sample_file_name
+                log_df.loc[log_df['record_id'] ==
+                           record_id, 'annotated'] = True
         # write doubled to file
         if doubled:
             doubled = set(doubled)
             with open('doubled.txt', 'a') as f:
                 for record_id in doubled:
                     f.write(str(record_id) + '\n')
-    
+
     current_date = datetime.now().strftime('%Y%m%d')
     new_log = f'annotation_log_{current_date}.csv'
     new_log_path = os.path.join(ANNOTATION_DIR, new_log)
@@ -153,6 +159,38 @@ def remove_from_annotation_log(subsample: str) -> None:
     new_log = f'annotation_log_{current_date}.csv'
     new_log_path = os.path.join(ANNOTATION_DIR, new_log)
     log_df.to_csv(new_log_path, index=False)
+
+
+def readd_partial_annotation_log(partial_annotated: str) -> None:
+    log_df = _get_most_recent_annotation_log()
+    file_name = os.path.basename(partial_annotated)
+    # extract 250_20240423_113436 from prodigy_export_bernard_200_20240423_113436_20240713_171907.jsonl
+    input_file = 'psychedelic_study_' + \
+        '_'.join(file_name.split('_')[3:6]) + '.jsonl'
+    # read in annotated records into a annoated_df
+    annot_ct = 0
+    not_annot_ct = 0
+    with open(partial_annotated, 'r') as infile:
+        annotated_df = pd.DataFrame([json.loads(line) for line in infile])
+        # iterate through log_df and check if record_id was annotated
+        for index, row in log_df.iterrows():
+            if row['data_set'] == input_file:
+                record_id = row['record_id']
+                # if record_id not annotated, set annotated to False and remove data_set
+                if record_id not in annotated_df['record_id'].values:
+                    log_df.loc[index, 'annotated'] = False
+                    log_df.loc[index, 'data_set'] = ''
+                    not_annot_ct += 1
+                else:
+                    annot_ct += 1
+    print(f'Annotated: {annot_ct}, Not Annotated & removed from log: {not_annot_ct}')
+    
+    # write new log
+    current_date = datetime.now().strftime('%Y%m%d')
+    new_log = f'annotation_log_{current_date}.csv'
+    new_log_path = os.path.join(ANNOTATION_DIR, new_log)
+    log_df.to_csv(new_log_path, index=False)
+           
 
 def annotation_progress() -> None:
     log_df = _get_most_recent_annotation_log()
@@ -205,12 +243,6 @@ def main():
     # annotation_progress()
     # remove_from_annotation_log('psychedelic_study_250_20240423_113437.jsonl')
     # annotation_progress()
-        
-        
-    # subsample = generate_subsample(cleaned_data, 250)
-    # update_annotation_log(subsample)
-    # annotation_progress()
-    
 
     # subsample = generate_subsample(cleaned_data, 250)
     # update_annotation_log(subsample)
@@ -219,38 +251,45 @@ def main():
     # subsample = generate_subsample(cleaned_data, 250)
     # update_annotation_log(subsample)
     # annotation_progress()
-    
+
     # subsample = generate_subsample(cleaned_data, 250)
     # update_annotation_log(subsample)
     # annotation_progress()
-    
+
+    # subsample = generate_subsample(cleaned_data, 250)
+    # update_annotation_log(subsample)
+    # annotation_progress()
+
     # remove_from_annotation_log('psychedelic_study_250_20240425_134820.jsonl')
     # remove_from_annotation_log('psychedelic_study_250_20240425_134821.jsonl')
     # remove_from_annotation_log('psychedelic_study_250_20240425_134822.jsonl')
     # remove_from_annotation_log('psychedelic_study_250_20240425_134823.jsonl')
     # remove_from_annotation_log('psychedelic_study_40_20240523_162946.jsonl')
     # remove_from_annotation_log('psychedelic_study_250_20240425_152801.jsonl')
-    
+
     # update_annotation_log('prodigy_inputs/psychedelic_study_250_20240423_113435.jsonl')
     # update_annotation_log('prodigy_inputs/psychedelic_study_250_20240423_113436.jsonl')
     # update_annotation_log('prodigy_inputs/psychedelic_study_250_20240423_113437.jsonl')
     # update_annotation_log('prodigy_inputs/psychedelic_study_95_20240423_113434.jsonl')
     # update_annotation_log('prodigy_inputs/psychedelic_study_24_20240425_152801.jsonl')
     # annotation_progress()
-    
+
     # subsample = generate_subsample(cleaned_data, 40)
     # update_annotation_log(subsample)
     # annotation_progress()
-    
+
     # subsample = generate_subsample(cleaned_data, 250)
     # update_annotation_log(subsample)
     # annotation_progress()
-    
-    subsample = generate_subsample(cleaned_data, 40)
-    update_annotation_log(subsample)
+
+    # subsample = generate_subsample(cleaned_data, 40)
+    # update_annotation_log(subsample)
+    # annotation_progress()
+
+    file = 'prodigy_exports/prodigy_export_bernard_250_20240423_113436_20240713_171907.jsonl'
+    readd_partial_annotation_log(file)
     annotation_progress()
 
-    
 
 if __name__ == '__main__':
 
