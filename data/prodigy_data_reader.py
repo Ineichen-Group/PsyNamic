@@ -506,12 +506,12 @@ class ProdigyDataCollector():
                     return True
             return False
 
-    def get_label_task_df(self, task: str) -> pd.DataFrame:
+    def get_label_task_df(self, task: str) -> tuple[dict[int, str], pd.DataFrame]:
         if self._is_valid_task(task):
             label_to_int, task_df = self.prodigy_readers[0].get_label_task_df(
                 task)
             for reader in self.prodigy_readers[1:]:
-                _, reader_task_df = reader.get_label_task_df(
+                label_to_int, reader_task_df = reader.get_label_task_df(
                     task, label_to_int)
                 task_df = pd.concat([task_df, reader_task_df])
 
@@ -519,7 +519,7 @@ class ProdigyDataCollector():
             if not any(task_df[task].apply(len) > 1):
                 task_df[task] = task_df[task].apply(lambda x: x[0])
 
-            return task_df
+            return label_to_int, task_df
 
     def get_onehot_task_df(self, task_name: str) -> pd.DataFrame:
         if self._is_valid_task(task_name):
@@ -900,7 +900,7 @@ class ProdigyIAAHelper():
         if self._is_valid_task(task_name):
             nltk_data = []
             for reader in self.prodigy_readers:
-                id_to_label, task_dfs = reader.get_label_task_df(task_name)
+                _, task_dfs = reader.get_label_task_df(task_name)
                 # iterate through dataframe
                 for _, row in task_dfs.iterrows():
                     new_item = (

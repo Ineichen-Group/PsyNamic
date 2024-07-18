@@ -181,9 +181,14 @@ class TestDataHandler(unittest.TestCase):
             self.relative_path, 'test_data/dummy_data.csv')
         self.multilabel = os.path.join(
             self.relative_path, 'test_data/dummy_data_multilabel.csv')
+        self.int_to_label = {
+            0: 'label1',
+            1: 'label2',
+            2: 'label3',
+        }
 
     def test_strat_single_label_split(self):
-        dh = DummyDataHandler(self.singlelable)
+        dh = DummyDataHandler(self.singlelable, int_to_label=self.int_to_label)
         self.assertEqual(dh.nr_classes, 3)
         self.assertEqual(dh.df.shape[0], 60)
         self.assertEqual(dh.is_multilabel, False)
@@ -220,7 +225,7 @@ class TestDataHandler(unittest.TestCase):
         self.assertEqual(dev.labels, labels)
         
     def test_strat_single_label_kfold(self):
-        dh = DummyDataHandler(self.singlelable)
+        dh = DummyDataHandler(self.singlelable, int_to_label=self.int_to_label)
 
         # Test with 5 splits, no validation set
         kfolds, test_data = dh.get_strat_k_fold_split(n_splits=6)
@@ -252,7 +257,7 @@ class TestDataHandler(unittest.TestCase):
             self.assertEqual(val.labels, labels)
         
     def test_strat_multilabel_split(self):
-        dh = DummyDataHandler(self.multilabel)
+        dh = DummyDataHandler(self.multilabel, int_to_label=self.int_to_label)
         self.assertEqual(dh.is_multilabel, True)
         self.assertEqual(dh.nr_classes, 5)
 
@@ -261,7 +266,7 @@ class TestDataHandler(unittest.TestCase):
         self.assertEqual(len(test), 12)
         
     def test_strat_multilabel_kfold(self):
-        dh = DummyDataHandler(self.multilabel)
+        dh = DummyDataHandler(self.multilabel, int_to_label=self.int_to_label)
         self.assertEqual(dh.is_multilabel, True)
         self.assertEqual(dh.nr_classes, 5)
         
@@ -278,12 +283,6 @@ class TestDataHandler(unittest.TestCase):
         for train, val in kfolds:
             self.assertEqual(len(train), 27)
             self.assertEqual(len(val), 9)
-            
-        
-
-        
-        
-        
 
 
 if __name__ == '__main__':

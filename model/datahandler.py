@@ -3,12 +3,14 @@ from abc import abstractmethod
 from os import path
 from typing import Iterable, Union
 
+import json
 import numpy as np
 import pandas as pd
 import torch
 from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 from torch.utils.data import Dataset
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold, MultilabelStratifiedShuffleSplit
+from transformers import BertTokenizer
 
 # Fix the random seed for reproducibility
 SEED = 42
@@ -24,9 +26,13 @@ class DataSplit(Dataset):
     TEXT_COL = 'text'
     LABEL_COL = 'labels'
 
-    def __init__(self, split: pd.DataFrame, multilabel: bool = False) -> None:
+    def __init__(self, split: pd.DataFrame, id2label: dict[int, str], multilabel: bool = False, tokenizer=BertTokenizer, max_len: int = 128) -> None:
         self.df = split
         self.is_multilabel = multilabel
+        self.tokenizer = tokenizer.from_pretrained('bert-base-uncased')
+        self.max_len = max_len
+        self.id2label = id2label
+        self.label2id = {v: k for k, v in id2label.items()}
 
     def __len__(self) -> int:
         return len(self.df)
@@ -36,10 +42,26 @@ class DataSplit(Dataset):
         labels = self.df.iloc[idx][self.LABEL_COL]
 
         # in case of multilabel classification, convert labels to tensor
-        if isinstance(labels, list):
-            labels = torch.tensor(labels)
+        # if isinstance(labels, list):
+        #     labels = torch.tensor(labels)
 
-        return {self.TEXT_COL: text, self.LABEL_COL: labels}
+        # TODO: save data encoded to save time
+        encoding = self.tokenizer.encode_plus(
+            text,
+            add_special_tokens=True,
+            max_length=self.max_len,
+            return_token_type_ids=False,
+            padding='max_length',
+            return_attention_mask=True,
+            return_tensors='pt',
+            truncation=True
+        )
+
+        return {
+            'input_ids': encoding['input_ids'].flatten(),
+            'attention_mask': encoding['attention_mask'].flatten(),
+            'labels': torch.tensor(labels, dtype=torch.long)
+        }
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, DataSplit):
@@ -63,6 +85,9 @@ class DataSplit(Dataset):
             label_list.sort()
             return label_list
 
+    @property
+    def nr_labels(self) -> int:
+        return len(self.labels)
 
 class DataHandler():
     """ Abstract DataHandler class to handle data loading, preprocessing and splitting.
@@ -72,14 +97,23 @@ class DataHandler():
     TEXT_COL = 'text'
     LABEL_COL = 'labels'
 
-    def __init__(self, data_path: str = None, nr_classes: int = None, is_multilabel: bool = None) -> None:
-        if data_path:
+    def __init__(self, data_path: str = None, meta_file: str = None, int_to_label: str = None) -> None:
+        # Provide either meta_file or int_to_label
+        if not meta_file and not int_to_label:
+            raise ValueError(
+                'Provide either a meta_file or int_to_label dictionary.')
+        if meta_file:
+            meta_data = json.load(open(meta_file))
+            self.id2label = meta_data['Int_to_label']
+        
+        elif int_to_label:
+            self.id2label = int_to_label
+        
+        # if it is a file, and not a folder
+        if path.isfile(data_path):
             self.df = self.read_in_data(data_path)
-        else:
-            self.df = None
-
-        self.is_multilabel = is_multilabel if is_multilabel else self._check_if_multilabel()
-        self.nr_classes = nr_classes if nr_classes else self._determine_nr_classes()
+            self.is_multilabel = self._check_if_multilabel()
+            self.nr_classes = self._determine_nr_classes()
 
         self.train = None
         self.test = None
@@ -129,9 +163,9 @@ class DataHandler():
 
         if reuse():
             if use_val:
-                return DataSplit(self.train), DataSplit(self.test), DataSplit(self.val)
+                return DataSplit(self.train, self.id2label), DataSplit(self.test, self.id2label), DataSplit(self.val, self.id2label)
             else:
-                return DataSplit(self.train), DataSplit(self.test), None
+                return DataSplit(self.train, self.id2label), DataSplit(self.test, self.id2label), None
         else:
             self.train_size = train_size
             self.use_val = use_val
@@ -160,7 +194,7 @@ class DataHandler():
                 self.train = train_df
                 self.val = val_df
                 self.test = test_df
-                return DataSplit(train_df), DataSplit(test_df), DataSplit(val_df)
+                return DataSplit(train_df, self.id2label), DataSplit(test_df, self.id2label), DataSplit(val_df, self.id2label)
 
             else:
                 msss = MultilabelStratifiedShuffleSplit(
@@ -172,7 +206,7 @@ class DataHandler():
                 self.train = train_df
                 self.test = test_df
 
-                return DataSplit(train_df), DataSplit(test_df), None
+                return DataSplit(train_df, self.id2label), DataSplit(test_df, self.id2label), None
         else:
             if use_val:
                 # First split: train (e.g. 60%) and remaining (e.g. 40%)
@@ -196,7 +230,7 @@ class DataHandler():
                 self.train = train_df
                 self.val = val_df
                 self.test = test_df
-                return DataSplit(train_df), DataSplit(test_df), DataSplit(val_df)
+                return DataSplit(train_df, self.id2label), DataSplit(test_df, self.id2label), DataSplit(val_df, self.id2label)
             else:
                 # Direct split: train (e.g. 80%) and test (e.g. 20%)
                 split = StratifiedShuffleSplit(
@@ -212,7 +246,7 @@ class DataHandler():
                     raise ValueError(
                         'Not all labels are present in the train and test set; data set might be too small or there is an error in the code.')
 
-                return DataSplit(train_df), DataSplit(test_df), None
+                return DataSplit(train_df, self.id2label), DataSplit(test_df, self.id2label), None
 
     def get_strat_k_fold_split(self, train_size: float = 0.8, n_splits: int = 5, seed: int = SEED) -> tuple[Iterable[tuple[DataSplit, DataSplit]], DataSplit]:
         """ Get stratified k-fold split of the data; i.e. n splits into train and validation set, with a test set.
@@ -239,7 +273,7 @@ class DataHandler():
                 train_df = train_split.df.iloc[train_idx]
                 val_df = train_split.df.iloc[val_idx]
                 folds.append(
-                    (DataSplit(train_df), DataSplit(val_df)))
+                    (DataSplit(train_df, self.id2label), DataSplit(val_df, self.id2label)))
 
             self.folds = folds
             return folds, test_split
@@ -253,7 +287,7 @@ class DataHandler():
                 val_df = train_split.df.iloc[val_idx]
 
                 folds.append(
-                    (DataSplit(train_df), DataSplit(val_df)))
+                    (DataSplit(train_df, self.id2label), DataSplit(val_df, self.id2label)))
 
             self.folds = folds
             return folds, test_split
@@ -262,7 +296,7 @@ class DataHandler():
         """ Save the train, test and validation splits to a given path as csv files.
         """
         if not path.exists(save_path):
-            raise FileNotFoundError(f'Path {save_path} does not exist.')
+            os.makedirs(save_path)
         if self.folds:
             for i, fold in enumerate(self.folds):
                 fold[0].to_csv(f'{save_path}/train_fold_{i}.csv', index=False)
@@ -330,6 +364,9 @@ class DataHandler():
                 raise FileNotFoundError(
                     f'No train/test/val files found in {load_path}.')
 
+        self.is_multilabel = self._check_if_multilabel()
+        self.nr_classes = self._determine_nr_classes()
+
     @abstractmethod
     def read_in_data(self, data_path: str) -> pd.DataFrame:
         """ Read in the data from a given path and return a pandas DataFrame, with columns 'id', 'text' and 'labels'. 
@@ -359,25 +396,48 @@ class DataHandler():
             return label_list
 
 
-class PsyNamic1vsAll(DataHandler):
+class PsyNamicSingleLabel(DataHandler):
 
-    def __init__(self, data_path: str, relevant_class: str,  nr_classes: int = None, is_multilabel: bool = None, int_to_label: dict = None) -> None:
-        super().__init__(data_path, nr_classes, is_multilabel, int_to_label)
+    def __init__(self, data_path: str, relevant_class: str, meta_file: str) -> None:
         self.relevant_class = relevant_class
+        super().__init__(data_path, meta_file=meta_file)
 
     def read_in_data(self, data_path: str) -> pd.DataFrame:
-        pass
+        df = pd.read_csv(data_path)
+        df = df[[self.ID_COL, self.TEXT_COL, self.relevant_class]]
+        df.rename(columns={self.relevant_class: self.LABEL_COL}, inplace=True)
+        return df
 
 
 class PsychNamicBIOHandler(DataHandler):
     pass
-    
+
     def read_in_data(self, data_path: str) -> pd.DataFrame:
         pass
 
 
 class PsychNamicRelevant(DataHandler):
-    pass
+    def __init__(self, data_path: str, id_col: str, title_col: str, abst_col: str, rel_col: str) -> None:
+        self.id_col = id_col
+        self.title_col = title_col
+        self.abst_col = abst_col
+        self.rel_col = rel_col
+        self.id2label = {0: 'excluded', 1: 'included'}
+        super().__init__(data_path, int_to_label=self.id2label)
+
+    def read_in_data(self, data_path: str) -> pd.DataFrame:
+        df = pd.read_csv(data_path)
+        # keep relevant 0/1 only (empty rows are dropped)
+        df = df[df[self.rel_col].notna()]
+        df[self.rel_col] = df[self.rel_col].astype(int)
+        df = df[[self.id_col, self.title_col, self.abst_col, self.rel_col]]
+        df[self.TEXT_COL] = df[self.title_col] + '.^\n' + df[self.abst_col]
+        # drop title and abstract columns
+        df.drop(columns=[self.title_col, self.abst_col], inplace=True)
+        df.rename(columns={self.id_col: self.ID_COL,
+                  self.rel_col: self.LABEL_COL}, inplace=True)
+        return df
+
 
 class DummyDataHandler(DataHandler):
     def read_in_data(self, data_path: str) -> pd.DataFrame:
