@@ -356,11 +356,11 @@ class ProdigyDataReader:
 
 
 class ProdigyDataCollector():
-    def __init__(self, list_of_files: list[str]) -> None:
+    def __init__(self, list_of_files: list[str], annotators: list[str]) -> None:
         self.prodigy_files = list_of_files
         self.prodigy_readers = []
-        for file in list_of_files:
-            prodigy_reader = ProdigyDataReader(file)
+        for file, name in zip(list_of_files, annotators):
+            prodigy_reader = ProdigyDataReader(file, name)
             self.prodigy_readers.append(prodigy_reader)
 
         self.tasks = {}
@@ -376,6 +376,9 @@ class ProdigyDataCollector():
         return self.df[self.df['id'] == id]
 
     def _read_all(self) -> None:
+        # add column with annotator to each df
+        for reader in self.prodigy_readers:
+            reader.df['annotator'] = reader.annotator
         self.df = pd.concat([reader.df for reader in self.prodigy_readers])
         # merge all ner_per_abstract dictionaries
         self.ner_per_abstract = {}
@@ -420,9 +423,22 @@ class ProdigyDataCollector():
         return differences
 
     def _check_duplicates(self) -> None:
-        if self.df.duplicated(subset='id').any():
-            raise ValueError('Duplicates in the data')
-
+        duplicates = self.df[self.df.duplicated(subset='id', keep=False)]
+        if not duplicates.empty:
+            # check if there is duplicates from the same annotator, by checking annotator column
+            duplicates_annotator = self.df[self.df.duplicated(
+                subset=['id', 'annotator'])]      
+            if not duplicates_annotator.empty:
+                raise ValueError(f'Same sample has been annotated by same annotator: {duplicates_annotator}')
+            else:
+                # prefer Ben's annotations, filter duplicates by annotator='Ben'
+                to_be_removed = duplicates[duplicates['annotator'] != 'Ben']
+                self.df = self.df.drop(to_be_removed.index)
+                print(f'Removed duplicates from annotators: {to_be_removed}')
+                   
+        # drop annotator column
+        self.df = self.df.drop(columns='annotator')
+        
     @property
     def nr_rejected(self) -> int:
         return sum([reader.nr_rejected for reader in self.prodigy_readers])

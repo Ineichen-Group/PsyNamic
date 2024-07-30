@@ -1,7 +1,0 @@
-Log file for IAA calculations
-Created at 2024-06-25 11:18:53
-Datafiles used:
-data/prodigy_exports/prodigy_export_ben_50_20240418_20240501_181325.jsonl (ben)
-data/prodigy_exports/prodigy_export_pia_50_20240418_20240509_110412.jsonl (pia)
-Agreed rejected: {5936, 49}
-Not agreed rejected: {6361}
