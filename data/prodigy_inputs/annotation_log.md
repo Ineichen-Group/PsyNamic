@@ -15,9 +15,9 @@
 | V4              | psychedelic_study_100_20240418.jsonl              | 100   | Done          | Ben                      | x                       |
 | V4              | psychedelic_study_50_20240418_review.jsonl        | 50    | Done          | Ben, Pia, Julia, Bernard | U                       |
 | -----------     | -----------                                       | ----- | -----------   | -----------              | -----------             |
-| V5              | psychedelic_study_250_20240423_113435.jsonl       | 250   | In Progress   | Julia                    |
-| V5              | psychedelic_study_250_20240423_113436.jsonl       | 250   | Done (52/250) | Bernard                  | tbr
-| V5              | psychedelic_study_250_20240423_113437.jsonl       | 250   | In Progress   | Pia                      |
+| V5              | psychedelic_study_250_20240423_113435.jsonl       | 250   | In Progress   | Julia                    |                         |
+| V5              | psychedelic_study_250_20240423_113436.jsonl       | 250   | Done (52/250) | Bernard                  | tbr                     |
+| V5              | psychedelic_study_250_20240423_113437.jsonl       | 250   | Done          | Pia                      | x, tbr?                 |
 | V5              | psychedelic_study_95_20240423_113434.jsonl        | 95    | Done          | Ben                      | U                       |
 | -----------     | -----------                                       | ----- | -----------   | -----------              | -----------             |
 | V6 / Review     | psychedelic_study_24_20240425_152801.jsonl        | 24    | Done          | Ben                      | U -> 11 samples doubled |
@@ -25,7 +25,7 @@
 | V7              | psychedelic_study_250_20240523_195806.jsonl       | 250   | In Progress   | Ben                      |                         |
 | V7              | psychedelic_study_40_20240523_195805.jsonl        | 40    | Done          | Pia, Ben                 | x, x                    |
 | -----------     | -----------                                       | ----- | -----------   | -----------              | -----------             |
-| V8              | psychedelic_study_40_20240620_145100.jsonl        | 40    | In Progress   | Pia, Ben                 |                         |
+| V8              | psychedelic_study_40_20240620_145100.jsonl        | 40    | In Progress   | Pia, Ben                 | x                       |
 | V8              | psychedelic_study_40_20240523_195805_review.jsonl | 40    | Done          | Pia, Ben                 | U                       |
 
 Current Total annotated: 1108
