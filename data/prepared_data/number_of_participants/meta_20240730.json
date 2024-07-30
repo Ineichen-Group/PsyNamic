@@ -1,0 +1,20 @@
+{
+    "Task": "PsyNamicSingleLabel",
+    "Int_to_label": {
+        "1-20": 0,
+        "100-199": 1,
+        "200-499": 2,
+        "21-40": 3,
+        "41-60": 4,
+        "500-999": 5,
+        "61-80": 6,
+        "81-100": 7,
+        "Not applicable": 8,
+        "Unknown": 9,
+        "≥1000": 10
+    },
+    "Train_size": 346,
+    "Use_val": false,
+    "Is_multilabel": false,
+    "Test_size": 87
+}

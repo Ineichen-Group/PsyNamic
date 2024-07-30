@@ -1,0 +1,24 @@
+{
+    "Task": "Number of Participants",
+    "Files": [
+        "data/prodigy_exports/prodigy_export_ben_95_20240423_113434.jsonl",
+        "data/iaa/iaa_round1_50/iaa_resolution/prodigy_export_review_all_text_50_20240418_20240607_145354.jsonl",
+        "data/prodigy_exports/prodigy_export_ben_24_20240425_152801.jsonl",
+        "data/iaa/iaa_round2_40/iaa_resolution/prodigy_export_review_all_text_40_20240523_20240705_183405.jsonl",
+        "data/prodigy_exports/prodigy_export_pia_250_20240423_113437_20240720_135743.jsonl"
+    ],
+    "Int_to_label": {
+        "1-20": 0,
+        "100-199": 1,
+        "200-499": 2,
+        "21-40": 3,
+        "41-60": 4,
+        "500-999": 5,
+        "61-80": 6,
+        "81-100": 7,
+        "Not applicable": 8,
+        "Unknown": 9,
+        "≥1000": 10
+    },
+    "Size": 433
+}

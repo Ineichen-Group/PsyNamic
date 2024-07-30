@@ -1,0 +1,11 @@
+{
+    "Task": "PsychNamicRelevant",
+    "Int_to_label": {
+        "0": "excluded",
+        "1": "included"
+    },
+    "Train_size": 4564,
+    "Use_val": false,
+    "Is_multilabel": false,
+    "Test_size": 1142
+}

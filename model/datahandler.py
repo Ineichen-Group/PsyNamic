@@ -1,12 +1,13 @@
 import os
 from abc import abstractmethod
 from os import path
-from typing import Iterable, Union
+from typing import Iterable, Union, Optional
 
 import json
 import numpy as np
 import pandas as pd
 import torch
+import csv
 from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 from torch.utils.data import Dataset
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold, MultilabelStratifiedShuffleSplit
@@ -89,6 +90,7 @@ class DataSplit(Dataset):
     def nr_labels(self) -> int:
         return len(self.labels)
 
+
 class DataHandler():
     """ Abstract DataHandler class to handle data loading, preprocessing and splitting.
         Idea: Inherit from this class and implement the abstract methods to create a DataHandler for a specific dataset.
@@ -105,10 +107,10 @@ class DataHandler():
         if meta_file:
             meta_data = json.load(open(meta_file))
             self.id2label = meta_data['Int_to_label']
-        
+
         elif int_to_label:
             self.id2label = int_to_label
-        
+
         # if it is a file, and not a folder
         if path.isfile(data_path):
             self.df = self.read_in_data(data_path)
@@ -119,8 +121,11 @@ class DataHandler():
         self.test = None
         self.val = None
         self.folds = []
-        self.train_size = None
-        self.use_val = None
+
+        # Splits data
+        self.train_size = 0.8
+        self.n_splits = 5
+        self.use_val = False
 
     def __len__(self) -> int:
         return len(self.df)
@@ -258,6 +263,9 @@ class DataHandler():
         Returns:
             tuple[Iterable[tuple[DataSplit, DataSplit]], DataSplit]: Iterable of k-folds and test split.
         """
+        self.train_size = train_size
+        self.n_splits = n_splits
+
         train_split, test_split, _ = self.get_strat_split(
             train_size=train_size)
 
@@ -296,22 +304,41 @@ class DataHandler():
         """
         if not path.exists(save_path):
             os.makedirs(save_path)
+        meta_data = {
+            "Task": self.__class__.__name__,
+            "Int_to_label": self.id2label,
+            "Train_size": self.train_size,
+            "Use_val": self.use_val,
+            "Is_multilabel": self.is_multilabel,
+            "Train_size": len(self.train),
+            "Test_size": len(self.test),
+        }
+        if self.use_val:
+            meta_data["Val_size"] = len(self.val)
+
         if self.folds:
             for i, fold in enumerate(self.folds):
-                fold[0].to_csv(f'{save_path}/train_fold_{i}.csv', index=False)
-                fold[1].to_csv(f'{save_path}/test_fold_{i}.csv', index=False)
+                fold[0].to_csv(f'{save_path}/train_fold_{i}.csv', index=False, quoting=csv.QUOTE_ALL)
+                fold[1].to_csv(f'{save_path}/test_fold_{i}.csv', index=False, quoting=csv.QUOTE_ALL)
                 try:
                     fold[2].to_csv(
                         f'{save_path}/val_fold_{i}.csv', index=False)
                 except AttributeError:
                     pass
+            meta_data['N_folds'] = len(self.folds)
         else:
-            self.train.to_csv(path.join(save_path, 'train.csv'), index=False)
-            self.test.to_csv(path.join(save_path, 'test.csv'), index=False)
+            self.train.to_csv(path.join(save_path, 'train.csv'), index=False, quoting=csv.QUOTE_ALL)
+            self.test.to_csv(path.join(save_path, 'test.csv'), index=False, quoting=csv.QUOTE_ALL)
             try:
-                self.val.to_csv(path.join(save_path, 'val.csv'), index=False)
+                self.val.to_csv(path.join(save_path, 'val.csv'), index=False, quoting=csv.QUOTE_ALL)
             except AttributeError:
                 pass
+
+        date = pd.Timestamp.now().strftime("%Y%m%d")
+        meta_file = path.join(save_path, f'meta_{date}.json')
+
+        with open(meta_file, 'w') as f:
+            json.dump(meta_data, f, indent=4, ensure_ascii=False)
 
     def load_splits(self, load_path: str) -> None:
         """ Load train, test and validation splits from a given path.
@@ -393,11 +420,25 @@ class DataHandler():
             label_list.sort()
             return label_list
 
+    @staticmethod
+    def replace_newlines(df):
+        return df.applymap(lambda x: x.replace('\n', '\\n') if isinstance(x, str) else x)
+
 
 class PsyNamicSingleLabel(DataHandler):
 
-    def __init__(self, data_path: str, relevant_class: str, meta_file: str) -> None:
+    def __init__(self, data_path: str, relevant_class: str, meta_file: Optional[str] = None) -> None:
         self.relevant_class = relevant_class
+        filename = path.basename(data_path)
+        task = filename.split('.')[0]
+        if not meta_file:
+            all_meta_files = [f for f in os.listdir(
+                path.dirname(data_path)) if 'meta' in f]
+            for file in all_meta_files:
+                if task in file:
+                    meta_file = path.join(path.dirname(data_path), file)
+                    break
+
         super().__init__(data_path, meta_file=meta_file)
 
     def read_in_data(self, data_path: str) -> pd.DataFrame:

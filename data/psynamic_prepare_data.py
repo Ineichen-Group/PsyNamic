@@ -286,8 +286,12 @@ def main():
     # update_annotation_log(subsample)
     # annotation_progress()
 
-    file = 'prodigy_exports/prodigy_export_bernard_250_20240423_113436_20240713_171907.jsonl'
-    readd_partial_annotation_log(file)
+    # file = 'prodigy_exports/prodigy_export_bernard_250_20240423_113436_20240713_171907.jsonl'
+    # readd_partial_annotation_log(file)
+    # annotation_progress()
+    
+    subsample = generate_subsample(cleaned_data, 250)
+    update_annotation_log(subsample)
     annotation_progress()
 
 

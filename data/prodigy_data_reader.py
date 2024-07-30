@@ -17,7 +17,7 @@ from stride_utils.iaa import (calculate_cohen_kappa_from_cfm_with_ci,
                               interpret_alpha, interpret_kappa)
 from sklearn.preprocessing import MultiLabelBinarizer
 # Below has to be adjusted given prodigy iteration
-FIXED_COLUMNS = ['id', 'text']
+FIXED_COLUMNS = ['id', 'text', 'annotator']
 # FIXED_COLUMNS = ['id', 'text', 'annotation']
 # TODO: better solution for fixed columns
 
@@ -52,6 +52,8 @@ class ProdigyDataReader:
         self._read_all_ner()
         self._task_multilabel = {}
 
+        self.df = self.replace_newlines(self.df)
+
     def __iter__(self):
         return self
 
@@ -68,6 +70,12 @@ class ProdigyDataReader:
 
     def __getitem__(self, id: str):
         return self.df[self.df['id'] == id]
+
+    def __contains__(self, item: Union[int, list[int]]) -> bool:
+        if isinstance(item, list):
+            return all([i in self.df['id'].to_list() for i in item])
+        else:
+            return item in self.df['id'].to_list()
 
     def has_thematic_split(self) -> bool:
         if self._thematic_split is None:
@@ -203,6 +211,12 @@ class ProdigyDataReader:
                 for ner in self.ner_per_abstract[id][label]:
                     ners.append((' '.join(ner), label))
         return ners
+
+    def are_ids_in_df(self, id: list[int]) -> bool:
+        return all([i in self.df['id'].to_list() for i in id])
+
+    def remove_ids(self, ids: list[int]) -> None:
+        self.df = self.df[~self.df['id'].isin(ids)]
 
     def _is_task_multi_label(self, task_name: str) -> bool:
         if self._is_valid_task(task_name):
@@ -354,6 +368,10 @@ class ProdigyDataReader:
         if os.path.exists(filename_reorder):
             self.jsonl_path = filename_reorder
 
+    @staticmethod
+    def replace_newlines(df):
+        return df.map(lambda x: x.replace('\n', '\\n') if isinstance(x, str) else x)
+
 
 class ProdigyDataCollector():
     def __init__(self, list_of_files: list[str], annotators: list[str]) -> None:
@@ -363,10 +381,13 @@ class ProdigyDataCollector():
             prodigy_reader = ProdigyDataReader(file, name)
             self.prodigy_readers.append(prodigy_reader)
 
+        for reader in self.prodigy_readers:
+            reader.df['annotator'] = reader.annotator
         self.tasks = {}
-
         self._check_tasks()
         self._read_all()
+        # add column with annotator to each df
+        
         self._check_duplicates()
 
     def __len__(self) -> int:
@@ -376,9 +397,6 @@ class ProdigyDataCollector():
         return self.df[self.df['id'] == id]
 
     def _read_all(self) -> None:
-        # add column with annotator to each df
-        for reader in self.prodigy_readers:
-            reader.df['annotator'] = reader.annotator
         self.df = pd.concat([reader.df for reader in self.prodigy_readers])
         # merge all ner_per_abstract dictionaries
         self.ner_per_abstract = {}
@@ -427,18 +445,19 @@ class ProdigyDataCollector():
         if not duplicates.empty:
             # check if there is duplicates from the same annotator, by checking annotator column
             duplicates_annotator = self.df[self.df.duplicated(
-                subset=['id', 'annotator'])]      
+                subset=['id', 'annotator'])]
             if not duplicates_annotator.empty:
-                raise ValueError(f'Same sample has been annotated by same annotator: {duplicates_annotator}')
+                raise ValueError(
+                    f'Same sample has been annotated by same annotator: {duplicates_annotator}')
             else:
-                # prefer Ben's annotations, filter duplicates by annotator='Ben'
-                to_be_removed = duplicates[duplicates['annotator'] != 'Ben']
-                self.df = self.df.drop(to_be_removed.index)
-                print(f'Removed duplicates from annotators: {to_be_removed}')
-                   
+                duplicate_ids = list(duplicates['id'].unique())
+                for reader in self.prodigy_readers:
+                    if duplicate_ids in reader and reader.annotator != 'Ben':
+                        reader.remove_ids(duplicate_ids)
+                self._read_all()
         # drop annotator column
         self.df = self.df.drop(columns='annotator')
-        
+
     @property
     def nr_rejected(self) -> int:
         return sum([reader.nr_rejected for reader in self.prodigy_readers])
