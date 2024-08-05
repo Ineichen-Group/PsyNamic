@@ -6,7 +6,8 @@
         "1": "included"
     },
     "Train_size": 4513,
-    "Use_val": false,
+    "Use_val": true,
     "Is_multilabel": false,
-    "Test_size": 1129
+    "Test_size": 565,
+    "Val_size": 565
 }

@@ -54,7 +54,7 @@ def prepare_splits():
     file = 'data/raw_data/asreview_dataset_all_Psychedelic Study.csv'
     data_handler = PsychNamicRelevant(
         file, 'record_id', 'title', 'abstract', 'included')
-    data_handler.get_strat_split()
+    data_handler.get_strat_split(use_val=True)
     data_handler.save_split(f'data/prepared_data/asreview_dataset_all/')
 
 
