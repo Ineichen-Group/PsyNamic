@@ -366,7 +366,7 @@ class DataHandler():
         with open(meta_file, 'w') as f:
             json.dump(meta_data, f, indent=4, ensure_ascii=False)
 
-    def load_splits(self, load_path: str) -> None:
+    def load_splits(self, load_path: str) -> bool:
         """ Load train, test and validation splits from a given path.
             To get the usable splits, call get_strat_split() or get_strat_k_fold_split() after loading the splits.
         """
@@ -383,6 +383,7 @@ class DataHandler():
             if path.exists(val_path):
                 self.val = pd.read_csv(val_path)
                 self.df = pd.concat([self.train, self.test, self.val])
+                self.use_val = True
             else:
                 self.df = pd.concat([self.train, self.test])
         else:
@@ -401,6 +402,7 @@ class DataHandler():
                     test_data = pd.read_csv(test_path)
 
                     if path.exists(path.join(load_path, f'val_fold_{i}.csv')):
+                        self.use_val = True
                         val_file = path.join(load_path, f'val_fold_{i}.csv')
                         val_data = pd.read_csv(val_file)
                         if i == 0:
@@ -417,6 +419,7 @@ class DataHandler():
 
         self.is_multilabel = self._check_if_multilabel()
         self.nr_classes = self._determine_nr_classes()
+        return self.use_val
 
     @abstractmethod
     def read_in_data(self, data_path: str) -> pd.DataFrame:

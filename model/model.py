@@ -10,6 +10,7 @@ from torch.optim import AdamW
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from transformers import (
     AutoModelForSequenceClassification,
+    AutoTokenizer,
     BertTokenizer,
     BertForSequenceClassification,
     TrainingArguments,
@@ -70,7 +71,7 @@ def init_argparse():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--mode', type=str,
-                        choices=['train', 'cont_train', 'eval'], required=True)
+                        choices=['train', 'cont_train', 'eval'], default='train')
     parser.add_argument('--data', type=str)
     parser.add_argument('--task', type=str)
 
@@ -118,55 +119,62 @@ def init_directories(model: str, task: str) -> str:
 def load_data(data: str):
     meta_file = os.path.join(data, 'meta.json')
     datahandler = DataHandler(data, meta_file=meta_file)
-    datahandler.load_splits(data)
-    train_dataset, test_dataset, eval_dataset = datahandler.get_strat_split()
+    use_vale = datahandler.load_splits(data)
+    train_dataset, test_dataset, eval_dataset = datahandler.get_strat_split(use_val=use_vale)
     return train_dataset, test_dataset, eval_dataset
 
 
-def train(project_dir: str, train_dataset: str, test_dataset: str, args, resume_from_checkpoint=False) -> None:
+def train(
+    project_dir: str,
+    train_dataset,
+    test_dataset,
+    args,
+    val_dataset=None,  # Optional parameter for validation dataset
+    resume_from_checkpoint=False
+) -> Trainer:
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
-    model_id = MODEL_IDENTIFIER[args.model]
-    # Initialize the tokenizer and model
-    tokenizer = BertTokenizer.from_pretrained(model_id)
-    model = BertForSequenceClassification.from_pretrained(
-        model_id, num_labels=train_dataset.nr_labels).to(device)
-    print(f'Length of train dataset: {len(train_dataset)}')
-    print(f'Length of test dataset: {len(test_dataset)}')
+    if resume_from_checkpoint:
+        model = AutoModelForSequenceClassification.from_pretrained(args.load).to(device)
+        tokenizer = AutoTokenizer.from_pretrained(args.load)
+    else:
+        model_id = MODEL_IDENTIFIER[args.model]
+        tokenizer = BertTokenizer.from_pretrained(model_id)
+        model = BertForSequenceClassification.from_pretrained(
+            model_id, num_labels=train_dataset.nr_labels).to(device)
 
     training_args = TrainingArguments(
         output_dir=project_dir,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
-        # logging_steps=10,
-        eval_strategy="epoch",
+        eval_strategy="epoch" if val_dataset is not None else "no",  # Conditionally set evaluation strategy
         save_strategy="epoch",
         load_best_model_at_end=True,
         # report_to='wandb',
         report_to='none',
         logging_dir=project_dir,
         logging_strategy="epoch",
-        run_name=os.path.basename(project_dir)
+        run_name=os.path.basename(project_dir),
+        resume_from_checkpoint=args.load if resume_from_checkpoint else None,
+        metric_for_best_model='eval_loss' if val_dataset is not None else None
     )
+
     total_steps = len(train_dataset) * args.epochs
-    optimizer = AdamW(model.parameters(), lr=args.learning_rate,
-                      weight_decay=args.weight_decay)
+    optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     scheduler = get_linear_schedule_with_warmup(
-        optimizer, num_warmup_steps=int(training_args.warmup_ratio * total_steps), num_training_steps=total_steps)
+        optimizer,
+        num_warmup_steps=int(training_args.warmup_ratio * total_steps),
+        num_training_steps=total_steps
+    )
 
     # Define compute metrics function
     def compute_metrics(pred):
         labels = pred.label_ids
         preds = pred.predictions.argmax(-1)
-
-        # Calculate accuracy
         accuracy = accuracy_score(labels, preds)
-
-        # Calculate precision, recall, and F1-score
         precision = precision_score(labels, preds, average='weighted')
         recall = recall_score(labels, preds, average='weighted')
         f1 = f1_score(labels, preds, average='weighted')
-
         return {
             'accuracy': accuracy,
             'precision': precision,
@@ -179,23 +187,19 @@ def train(project_dir: str, train_dataset: str, test_dataset: str, args, resume_
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        eval_dataset=test_dataset,
+        eval_dataset=val_dataset if val_dataset is not None else None,  # Conditionally pass validation dataset
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,
         optimizers=(optimizer, scheduler),
-        resume_from_checkpoint=resume_from_checkpoint
     )
 
-    if args.early_stopping_patience > 0:
-        training_args.load_best_model_at_end = True
-        training_args.metric_for_best_model = 'eval_loss'
-        trainer.callbacks = [EarlyStoppingCallback(
-            early_stopping_patience=args.early_stopping_patience)]
+    if args.early_stopping_patience > 0 and val_dataset is not None:
+        trainer.add_callback(EarlyStoppingCallback(early_stopping_patience=args.early_stopping_patience))
 
     # Train the model
     trainer.train()
-    return trainer
 
+    return trainer
 
 def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> str:
     # Get predictions
@@ -261,16 +265,16 @@ def load_model(args: argparse.Namespace) -> Trainer:
     return trainer
 
 
-# MODE = 'train'
+# MODE = 'train' e.g. python model/model.py --model pubmedbert --data data/prepared_data/asreview_dataset_all --task 'Relevant Sample'
 def finetune(args: argparse.Namespace) -> None:
     project_path = init_directories(args.model, args.task)
     save_train_args(project_path, args)
-    train_dataset, test_dataset, eval_dataloader = load_data(args.data)
-    trainer = train(project_path, train_dataset, test_dataset, args)
+    train_dataset, test_dataset, val_dataset = load_data(args.data)
+    trainer = train(project_path, train_dataset, test_dataset, args, val_dataset=val_dataset)
     evaluate(project_path, trainer)
 
 
-#  MODE = 'cont_train', e.g. python model.py --mode cont_train --load model/experiments/pubmedbert_relevant_sample_20240730
+#  MODE = 'cont_train', e.g. python model/model.py --mode cont_train --load model/experiments/pubmedbert_relevant_sample_20240730/checkpoint-565
 def cont_finetune(args: argparse.Namespace) -> None:
     args = set_args_from_file(args)
     train_dataset, test_dataset, eval_dataloader = load_data(args.data)
@@ -279,7 +283,7 @@ def cont_finetune(args: argparse.Namespace) -> None:
     evaluate(args.load, trainer, test_dataset)
 
 
-# MODE = 'eval', e.g. python model.py --mode eval --load model/experiments/pubmedbert_relevant_sample_20240730
+# MODE = 'eval', e.g. python model/model.py --mode eval --load model/experiments/pubmedbert_relevant_sample_20240730/checkpoint-565
 def load_and_evaluate(args: argparse.Namespace) -> None:
     exp_path = os.path.dirname(args.load)
     args = set_args_from_file(args)
