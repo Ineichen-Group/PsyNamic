@@ -34,6 +34,8 @@ class DataSplit(Dataset):
         self.max_len = max_len
         self.id2label = id2label
         self.label2id = {v: k for k, v in id2label.items()}
+        
+        self._index = 0 # index for iteration
 
     def __len__(self) -> int:
         return len(self.df)
@@ -45,18 +47,20 @@ class DataSplit(Dataset):
         # in case of multilabel classification, convert labels to tensor
         # if isinstance(labels, list):
         #     labels = torch.tensor(labels)
-
-        # TODO: save data encoded to save time
-        encoding = self.tokenizer.encode_plus(
-            text,
-            add_special_tokens=True,
-            max_length=self.max_len,
-            return_token_type_ids=False,
-            padding='max_length',
-            return_attention_mask=True,
-            return_tensors='pt',
-            truncation=True
-        )
+        try: 
+            # TODO: save data encoded to save time
+            encoding = self.tokenizer.encode_plus(
+                text,
+                add_special_tokens=True,
+                max_length=self.max_len,
+                return_token_type_ids=False,
+                padding='max_length',
+                return_attention_mask=True,
+                return_tensors='pt',
+                truncation=True
+            )
+        except ValueError:
+            breakpoint()
 
         return {
             'input_ids': encoding['input_ids'].flatten(),
@@ -71,6 +75,21 @@ class DataSplit(Dataset):
 
     def __repr__(self) -> str:
         return f"DataSplit(num_samples={len(self.df)}, labels={self.labels})"
+
+    def __iter__(self):
+        self._index = 0  # Reset index at the start of iteration
+        return self
+        
+    def __next__(self):
+        if self._index < len(self.df):
+            id_ = self.df.iloc[self._index][self.ID_COL]
+            text = self.df.iloc[self._index][self.TEXT_COL]
+            labels = self.df.iloc[self._index][self.LABEL_COL]
+            self._index += 1
+            return id_, text, labels
+        else:
+            raise StopIteration
+        
 
     def to_csv(self, save_path: str) -> None:
         self.df.to_csv(save_path, index=False)
@@ -304,8 +323,10 @@ class DataHandler():
         """
         if not path.exists(save_path):
             os.makedirs(save_path)
+        date = pd.Timestamp.now().strftime("%Y%m%d")
         meta_data = {
             "Task": self.__class__.__name__,
+            "Date": date,
             "Int_to_label": self.id2label,
             "Train_size": self.train_size,
             "Use_val": self.use_val,
@@ -318,8 +339,10 @@ class DataHandler():
 
         if self.folds:
             for i, fold in enumerate(self.folds):
-                fold[0].to_csv(f'{save_path}/train_fold_{i}.csv', index=False, quoting=csv.QUOTE_ALL)
-                fold[1].to_csv(f'{save_path}/test_fold_{i}.csv', index=False, quoting=csv.QUOTE_ALL)
+                fold[0].to_csv(f'{save_path}/train_fold_{i}.csv',
+                               index=False, quoting=csv.QUOTE_ALL)
+                fold[1].to_csv(f'{save_path}/test_fold_{i}.csv',
+                               index=False, quoting=csv.QUOTE_ALL)
                 try:
                     fold[2].to_csv(
                         f'{save_path}/val_fold_{i}.csv', index=False)
@@ -327,15 +350,18 @@ class DataHandler():
                     pass
             meta_data['N_folds'] = len(self.folds)
         else:
-            self.train.to_csv(path.join(save_path, 'train.csv'), index=False, quoting=csv.QUOTE_ALL)
-            self.test.to_csv(path.join(save_path, 'test.csv'), index=False, quoting=csv.QUOTE_ALL)
+            self.train.to_csv(path.join(save_path, 'train.csv'),
+                              index=False, quoting=csv.QUOTE_ALL)
+            self.test.to_csv(path.join(save_path, 'test.csv'),
+                             index=False, quoting=csv.QUOTE_ALL)
             try:
-                self.val.to_csv(path.join(save_path, 'val.csv'), index=False, quoting=csv.QUOTE_ALL)
+                self.val.to_csv(path.join(save_path, 'val.csv'),
+                                index=False, quoting=csv.QUOTE_ALL)
             except AttributeError:
                 pass
 
-        date = pd.Timestamp.now().strftime("%Y%m%d")
-        meta_file = path.join(save_path, f'meta_{date}.json')
+
+        meta_file = path.join(save_path, f'meta.json')
 
         with open(meta_file, 'w') as f:
             json.dump(meta_data, f, indent=4, ensure_ascii=False)
@@ -420,10 +446,6 @@ class DataHandler():
             label_list.sort()
             return label_list
 
-    @staticmethod
-    def replace_newlines(df):
-        return df.applymap(lambda x: x.replace('\n', '\\n') if isinstance(x, str) else x)
-
 
 class PsyNamicSingleLabel(DataHandler):
 
@@ -470,11 +492,13 @@ class PsychNamicRelevant(DataHandler):
         df = df[df[self.rel_col].notna()]
         df[self.rel_col] = df[self.rel_col].astype(int)
         df = df[[self.id_col, self.title_col, self.abst_col, self.rel_col]]
-        df[self.TEXT_COL] = df[self.title_col] + '.^\n' + df[self.abst_col]
+        df[self.TEXT_COL] = df[self.title_col] + '.^\\n' + df[self.abst_col]
         # drop title and abstract columns
         df.drop(columns=[self.title_col, self.abst_col], inplace=True)
         df.rename(columns={self.id_col: self.ID_COL,
                   self.rel_col: self.LABEL_COL}, inplace=True)
+        # remove all rows with NaN values in any column
+        df.dropna(inplace=True)
         return df
 
 

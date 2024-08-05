@@ -1,11 +1,26 @@
-from torch.utils.data import DataLoader
-from transformers import BertTokenizer, BertForSequenceClassification, TrainingArguments, Trainer, EarlyStoppingCallback, AdamW, get_linear_schedule_with_warmup
-from datahandler import DataHandler, PsychNamicRelevant, PsyNamicSingleLabel, DataSplit
-import numpy as np
-import os
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import argparse
+import json
+import os
 from datetime import datetime
+import numpy as np
+import pandas as pd
+import torch
+from torch.utils.data import DataLoader
+from torch.optim import AdamW
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from transformers import (
+    AutoModelForSequenceClassification,
+    BertTokenizer,
+    BertForSequenceClassification,
+    TrainingArguments,
+    Trainer,
+    EarlyStoppingCallback,
+    get_linear_schedule_with_warmup
+)
+from confidenceinterval import classification_report_with_ci
+from datahandler import DataHandler, PsychNamicRelevant, PsyNamicSingleLabel, DataSplit
+from abc import ABC, abstractmethod
+
 
 EXPERIMENT_PATH = './model/experiments'
 DATA_PATH = './data/prepared_data'
@@ -28,12 +43,41 @@ os.environ['WANDB_DISABLED'] = 'true'
 # TODO: enable all hyperparameters
 # TODO: Hyperparameter tune
 
+class CustomTrainer:
+
+    def __innit__(self, arg: argparse.Namespace):
+        pass
+    
+    @abstractmethod    
+    def train(self):
+        pass
+    
+    @abstractmethod
+    def save_model(self):
+        pass
+    
+    @abstractmethod
+    def load_model(self):
+        pass
+
+
+class BertTrainer(CustomTrainer):
+    
+    pass
+
 
 def init_argparse():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', type=str, required=True)
-    parser.add_argument('--data', type=str, required=True)
-    parser.add_argument('--task', type=str, required=True)
+
+    parser.add_argument('--mode', type=str,
+                        choices=['train', 'cont_train', 'eval'], required=True)
+    parser.add_argument('--data', type=str)
+    parser.add_argument('--task', type=str)
+
+    # TRAIN:
+    # General
+    parser.add_argument('--model', type=str)
+    parser.add_argument('--cross_val', type=bool, default=False)
 
     # Hyperparameters
     parser.add_argument('--batch_size', type=int, default=8)
@@ -41,21 +85,25 @@ def init_argparse():
     parser.add_argument('--weight_decay', type=float, default=0.01)
     parser.add_argument('--lr_scheduler', type=str, default='linear')
     parser.add_argument('--warmup_ratio', type=int, default=0.1)
-
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--max_len', type=int, default=128)
     parser.add_argument('--early_stopping_patience', type=int, default=3)
-
     parser.add_argument('--gradient_clipping', type=float, default=0.1)
-
-    # Training
-    parser.add_argument('--cross_val', type=bool, default=False)
-
-    # Evaluation
     parser.add_argument(
         '--metrics', type=list[str], default=['accuracy', 'precision', 'recall', 'f1'])
+    parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
+
+    # CONT_TRAIN
+    parser.add_argument('--load', type=str, default=None)  # Experiment folder
+
     return parser.parse_args()
+
+
+def save_train_args(project_dir: str, args: argparse.Namespace) -> None:
+    # Write the training arguments to a json
+    with open(os.path.join(project_dir, 'params.json'), 'w') as f:
+        json.dump(vars(args), f)
 
 
 def init_directories(model: str, task: str) -> str:
@@ -75,14 +123,15 @@ def load_data(data: str):
     return train_dataset, test_dataset, eval_dataset
 
 
-def train(project_dir, train_dataset, test_dataset, args) -> None:
+def train(project_dir: str, train_dataset: str, test_dataset: str, args, resume_from_checkpoint=False) -> None:
+    device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
     model_id = MODEL_IDENTIFIER[args.model]
     # Initialize the tokenizer and model
     tokenizer = BertTokenizer.from_pretrained(model_id)
     model = BertForSequenceClassification.from_pretrained(
-        model_id, num_labels=train_dataset.nr_labels)
+        model_id, num_labels=train_dataset.nr_labels).to(device)
     print(f'Length of train dataset: {len(train_dataset)}')
-    print(f'Lenght of test dataset: {len(test_dataset)}')
+    print(f'Length of test dataset: {len(test_dataset)}')
 
     training_args = TrainingArguments(
         output_dir=project_dir,
@@ -134,6 +183,7 @@ def train(project_dir, train_dataset, test_dataset, args) -> None:
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,
         optimizers=(optimizer, scheduler),
+        resume_from_checkpoint=resume_from_checkpoint
     )
 
     if args.early_stopping_patience > 0:
@@ -147,18 +197,119 @@ def train(project_dir, train_dataset, test_dataset, args) -> None:
     return trainer
 
 
-def evaluate(project_folder, trainer: Trainer, test_dataset: DataSplit) -> None:
-    # Write id, text, true_label, pred_label and probabilities to file
-    pass
-   
+def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> str:
+    # Get predictions
+    predictions = trainer.predict(test_dataset)
+    labels = predictions.label_ids
+    preds = predictions.predictions.argmax(-1)
+    
+    # Calculate probabilities using softmax
+    logits = predictions.predictions
+    probabilities = np.exp(logits - np.max(logits, axis=-1, keepdims=True))
+    probabilities /= probabilities.sum(axis=-1, keepdims=True)
+    
+    # Prepare lists for DataFrame
+    data = []
+    for i, (id, text, label) in enumerate(test_dataset):
+        prediction = preds[i]
+        probability = probabilities[i][prediction]
+        data.append({
+            "id": id,
+            "text": text,
+            "prediction": prediction,
+            "probability": probability,
+            "label": label
+        })
+    
+    # Create DataFrame
+    df = pd.DataFrame(data)
+    
+    # Save DataFrame to CSV
+    output_file = os.path.join(project_folder, 'predictions.csv')
+    df.to_csv(output_file, index=False)
+    
+    # Compute classification report and save to CSV
+    y_true = labels
+    y_predicted = preds
+    report_df = classification_report_with_ci(y_true, y_predicted)
+    report_file = os.path.join(project_folder, 'classification_report.csv')
+    pd.DataFrame(report_df).to_csv(report_file)
+    
+    return output_file
+
+
+def set_args_from_file(args: argparse.Namespace) -> argparse.Namespace:
+    params_json = os.path.join(os.path.dirname(args.load), 'params.json')
+    with open(params_json, 'r') as f:
+        params = json.load(f)
+    
+    ignore = ['mode', 'load']
+    if args.data is not None:
+        ignore.append('data')
+
+    for key, value in params.items():
+        if key not in ignore:
+            setattr(args, key, value)        
+
+    return args
+
+
+def load_model(args: argparse.Namespace) -> Trainer:
+    device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
+    model = AutoModelForSequenceClassification.from_pretrained(args.load).to(device)
+    trainer = Trainer(model=model)
+    return trainer
+
+
+# MODE = 'train'
+def finetune(args: argparse.Namespace) -> None:
+    project_path = init_directories(args.model, args.task)
+    save_train_args(project_path, args)
+    train_dataset, test_dataset, eval_dataloader = load_data(args.data)
+    trainer = train(project_path, train_dataset, test_dataset, args)
+    evaluate(project_path, trainer)
+
+
+#  MODE = 'cont_train', e.g. python model.py --mode cont_train --load model/experiments/pubmedbert_relevant_sample_20240730
+def cont_finetune(args: argparse.Namespace) -> None:
+    args = set_args_from_file(args)
+    train_dataset, test_dataset, eval_dataloader = load_data(args.data)
+    trainer = train(args.load, train_dataset, test_dataset,
+                    args, resume_from_checkpoint=True)
+    evaluate(args.load, trainer, test_dataset)
+
+
+# MODE = 'eval', e.g. python model.py --mode eval --load model/experiments/pubmedbert_relevant_sample_20240730
+def load_and_evaluate(args: argparse.Namespace) -> None:
+    exp_path = os.path.dirname(args.load)
+    args = set_args_from_file(args)
+    trainer = load_model(args)
+    test_dataset = load_data(args.data)[1]
+    evaluate(exp_path, trainer, test_dataset)
 
 
 def main():
     args = init_argparse()
-    project_path = init_directories(args.model, args.task)
-    train_dataset, test_dataset, eval_dataloader = load_data(args.data)
-    trainer = train(project_path, train_dataset, test_dataset, args)
-    evaluate(project_path, trainer)
+    if args.mode == 'train':
+        finetune(args)
+
+    elif args.mode == 'cont_train':
+        # check if the experiment folder exists
+        if args.load is None or not os.path.exists(args.load):
+            raise ValueError(
+                'Please provide the correct path to the experiment folder to continue training')
+        
+        cont_finetune(args)
+
+    elif args.mode == 'eval':
+        if args.load is None or not os.path.exists(args.load):
+            raise ValueError(
+                'Please provide the correct path to the experiment folder to continue training')
+        
+        if args.data is None:
+            print('Defaulting to test data split used for training')
+            
+        load_and_evaluate(args)
 
 
 if __name__ == "__main__":

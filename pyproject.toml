@@ -19,6 +19,7 @@ iterative-stratification = "^0.1.7"
 transformers = "^4.42.3"
 accelerate = "^0.32.1"
 wandb = "^0.17.4"
+confidenceinterval = {git = "https://github.com/jacobgil/confidenceinterval.git"}
 [tool.poetry.group.dev.dependencies]
 pandas = "^2.2.2"
 
