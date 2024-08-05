@@ -15,34 +15,30 @@ def prepare_train_data(list_jsonl: list[str], annotators: list[str]) -> None:
     for task in tasks:
         task_string = task.replace(' ', '_').lower()
         date = time.strftime("%Y%m%d")
+        meta_data = {
+            "Date": date,
+            "Task": task,
+            "Files": list_jsonl,
+            "Size": len(prodigy_data),
+        }
+
         if prodigy_data.is_multilabel(task):
             meta_file = os.path.join(
-                prepared_data, f'onehot_{task_string}_meta_{date}.csv')
+                prepared_data, f'onehot_{task_string}_meta.csv')
             task_df = prodigy_data.get_onehot_task_df(task)
             task_df.to_csv(os.path.join(
                 prepared_data, f'onehot_{task_string}.csv'), index=False)
-            meta_data = {
-                "Task": task,
-                "Files": list_jsonl,
-                "Size": len(prodigy_data),
-            }
             with open(meta_file, 'w') as f:
                 json.dump(meta_data, f, indent=4, ensure_ascii=False)
 
         else:
             meta_file = os.path.join(
-                prepared_data, f'{task_string}_meta_{date}.csv')
+                prepared_data, f'{task_string}_meta.csv')
             int_to_label, task_df = prodigy_data.get_label_task_df(task)
             task_df.to_csv(os.path.join(
                 prepared_data, f'{task_string}.csv'), index=False)
 
-            meta_data = {
-                "Task": task,
-                "Files": list_jsonl,
-                "Int_to_label": int_to_label,
-                "Size": len(prodigy_data),
-            }
-
+            meta_data["Int_to_label"] = int_to_label
             with open(meta_file, 'w') as f:
                 json.dump(meta_data, f, indent=4, ensure_ascii=False)
 

@@ -1,5 +1,6 @@
 {
-    "Task": "Outcomes",
+    "Date": "20240805",
+    "Task": "Study Type",
     "Files": [
         "data/prodigy_exports/prodigy_export_ben_95_20240423_113434.jsonl",
         "data/iaa/iaa_round1_50/iaa_resolution/prodigy_export_review_all_text_50_20240418_20240607_145354.jsonl",
@@ -7,5 +8,16 @@
         "data/iaa/iaa_round2_40/iaa_resolution/prodigy_export_review_all_text_40_20240523_20240705_183405.jsonl",
         "data/prodigy_exports/prodigy_export_pia_250_20240423_113437_20240720_135743.jsonl"
     ],
-    "Size": 433
+    "Size": 433,
+    "Int_to_label": {
+        "Case report": 0,
+        "Case series": 1,
+        "Cohort study": 2,
+        "Other": 3,
+        "Qualitative Study": 4,
+        "Randomized-controlled trial (RCT)": 5,
+        "Real-world study": 6,
+        "Study protocol": 7,
+        "Systematic review/meta-analysis": 8
+    }
 }
