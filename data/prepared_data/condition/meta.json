@@ -1,0 +1,24 @@
+{
+    "Task": "PsyNamicMultiLabel",
+    "Date": "20240808",
+    "Int_to_label": {
+        "0": "Psychiatric condition",
+        "1": "Depression",
+        "2": "Anxiety",
+        "3": "Post-traumatic stress disorder (PTSD)",
+        "4": "Alcoholism",
+        "5": "Other addictions (e.g. smoking)",
+        "6": "Anorexia",
+        "7": "Alzheimer’s disease",
+        "8": "Non-Alzheimer dementia",
+        "9": "Substance abuse",
+        "10": "(Chronic) Pain",
+        "11": "Palliative Setting",
+        "12": "Recreational Drug Use",
+        "13": "Healthy Participants"
+    },
+    "Train_size": 346,
+    "Use_val": false,
+    "Is_multilabel": true,
+    "Test_size": 87
+}

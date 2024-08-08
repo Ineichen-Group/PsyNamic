@@ -1,0 +1,14 @@
+{
+    "Task": "PsyNamicSingleLabel",
+    "Date": "20240808",
+    "Int_to_label": {
+        "0": "Not applicable",
+        "1": "Prospective",
+        "2": "Retrospective",
+        "3": "Unknown"
+    },
+    "Train_size": 346,
+    "Use_val": false,
+    "Is_multilabel": false,
+    "Test_size": 87
+}

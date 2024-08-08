@@ -1,0 +1,15 @@
+{
+    "Task": "PsyNamicSingleLabel",
+    "Date": "20240808",
+    "Int_to_label": {
+        "0": "Cross-sectional",
+        "1": "Longitudinal long",
+        "2": "Longitudinal short",
+        "3": "Not applicable",
+        "4": "Unknown"
+    },
+    "Train_size": 346,
+    "Use_val": false,
+    "Is_multilabel": false,
+    "Test_size": 87
+}

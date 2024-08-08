@@ -1,0 +1,19 @@
+{
+    "Task": "PsyNamicSingleLabel",
+    "Date": "20240808",
+    "Int_to_label": {
+        "0": "Case report",
+        "1": "Case series",
+        "2": "Cohort study",
+        "3": "Other",
+        "4": "Qualitative Study",
+        "5": "Randomized-controlled trial (RCT)",
+        "6": "Real-world study",
+        "7": "Study protocol",
+        "8": "Systematic review/meta-analysis"
+    },
+    "Train_size": 346,
+    "Use_val": false,
+    "Is_multilabel": false,
+    "Test_size": 87
+}

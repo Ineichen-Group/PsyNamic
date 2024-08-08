@@ -1,0 +1,16 @@
+{
+    "Task": "PsyNamicMultiLabel",
+    "Date": "20240808",
+    "Int_to_label": {
+        "0": "Placebo",
+        "1": "Active control",
+        "2": "Pre-post",
+        "3": "Other control",
+        "4": "Non-controlled",
+        "5": "Not applicable"
+    },
+    "Train_size": 344,
+    "Use_val": false,
+    "Is_multilabel": true,
+    "Test_size": 89
+}

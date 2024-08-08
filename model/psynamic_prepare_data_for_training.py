@@ -1,5 +1,5 @@
 from data.prodigy_data_reader import ProdigyDataCollector
-from datahandler import PsyNamicSingleLabel, PsychNamicRelevant
+from datahandler import PsyNamicSingleLabel, PsychNamicRelevant, PsyNamicMultiLabel
 import os
 import time
 import json
@@ -24,7 +24,7 @@ def prepare_train_data(list_jsonl: list[str], annotators: list[str]) -> None:
 
         if prodigy_data.is_multilabel(task):
             meta_file = os.path.join(
-                prepared_data, f'onehot_{task_string}_meta.csv')
+                prepared_data, f'onehot_{task_string}_meta.json')
             task_df = prodigy_data.get_onehot_task_df(task)
             task_df.to_csv(os.path.join(
                 prepared_data, f'onehot_{task_string}.csv'), index=False)
@@ -33,23 +33,63 @@ def prepare_train_data(list_jsonl: list[str], annotators: list[str]) -> None:
 
         else:
             meta_file = os.path.join(
-                prepared_data, f'{task_string}_meta.csv')
+                prepared_data, f'{task_string}_meta.json')
             int_to_label, task_df = prodigy_data.get_label_task_df(task)
             task_df.to_csv(os.path.join(
                 prepared_data, f'{task_string}.csv'), index=False)
 
-            meta_data["Int_to_label"] = int_to_label
+            meta_data["Label_to_int"] = int_to_label
             with open(meta_file, 'w') as f:
                 json.dump(meta_data, f, indent=4, ensure_ascii=False)
 
 
+def find_file_in_dir(file_string: str, dir: str) -> str:
+    for file in os.listdir(dir):
+        if file_string in file:
+            return os.path.join(dir, file)
+    return None
+
+
 def prepare_splits():
-    relevant_task = 'Number of Participants'
-    file = 'data/prepared_data/number_of_participants.csv'
-    data_handler = PsyNamicSingleLabel(file, relevant_task)
-    data_handler.get_strat_split()
-    data_handler.save_split(
-        f'data/prepared_data/{relevant_task.replace(" ", "_").lower()}/')
+
+    tasks = [
+        "Data Collection",
+        "Data Type",
+        "Number of Participants",
+        "Age of Participants",
+        "Application Form",
+        "Clinical Trial Phase",
+        "Condition",
+        "Outcomes",
+        "Regimen",
+        "Setting",
+        "Study Control",
+        "Study Purpose",
+        "Substance Naivety",
+        "Substances",
+        "Sex of Participants",
+        "Study Conclusion",
+        "Study Type",
+    ]
+    data_path = 'data/prepared_data/'
+    for task in tasks:
+        task_lower = task.replace(' ', '_').lower() + '.csv'
+        file = find_file_in_dir(task_lower, data_path)
+
+        if 'onehot' in file:
+            data_handler = PsyNamicMultiLabel(file)
+        else:
+            data_handler = PsyNamicSingleLabel(file, task)
+        try:
+            print(f'Processing {task}')
+            data_handler.print_label_dist()    
+            data_handler.get_strat_split()
+            data_handler.save_split(f'data/prepared_data/{task.replace(" ", "_").lower()}/')
+            print('\n')
+        except ValueError:
+            breakpoint()
+            # TODO: Handle to small splits
+            print(f'Could not split {task}')
 
     file = 'data/raw_data/asreview_dataset_all_Psychedelic Study.csv'
     data_handler = PsychNamicRelevant(

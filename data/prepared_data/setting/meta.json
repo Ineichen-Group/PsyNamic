@@ -1,0 +1,17 @@
+{
+    "Task": "PsyNamicMultiLabel",
+    "Date": "20240808",
+    "Int_to_label": {
+        "0": "Clinical",
+        "1": "Naturalistic",
+        "2": "Party setting",
+        "3": "Other setting",
+        "4": "Unknown",
+        "5": "Not applicable",
+        "6": "Palliative Setting"
+    },
+    "Train_size": 346,
+    "Use_val": false,
+    "Is_multilabel": true,
+    "Test_size": 87
+}

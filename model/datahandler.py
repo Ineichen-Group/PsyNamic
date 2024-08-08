@@ -34,8 +34,8 @@ class DataSplit(Dataset):
         self.max_len = max_len
         self.id2label = id2label
         self.label2id = {v: k for k, v in id2label.items()}
-        
-        self._index = 0 # index for iteration
+
+        self._index = 0  # index for iteration
 
     def __len__(self) -> int:
         return len(self.df)
@@ -47,7 +47,7 @@ class DataSplit(Dataset):
         # in case of multilabel classification, convert labels to tensor
         # if isinstance(labels, list):
         #     labels = torch.tensor(labels)
-        try: 
+        try:
             # TODO: save data encoded to save time
             encoding = self.tokenizer.encode_plus(
                 text,
@@ -79,7 +79,7 @@ class DataSplit(Dataset):
     def __iter__(self):
         self._index = 0  # Reset index at the start of iteration
         return self
-        
+
     def __next__(self):
         if self._index < len(self.df):
             id_ = self.df.iloc[self._index][self.ID_COL]
@@ -89,7 +89,6 @@ class DataSplit(Dataset):
             return id_, text, labels
         else:
             raise StopIteration
-        
 
     def to_csv(self, save_path: str) -> None:
         self.df.to_csv(save_path, index=False)
@@ -117,6 +116,7 @@ class DataHandler():
     ID_COL = 'id'
     TEXT_COL = 'text'
     LABEL_COL = 'labels'
+    ANNOTATOR_COL = 'annotator'
 
     def __init__(self, data_path: str = None, meta_file: str = None, int_to_label: str = None) -> None:
         # Provide either meta_file or int_to_label
@@ -125,7 +125,9 @@ class DataHandler():
                 'Provide either a meta_file or int_to_label dictionary.')
         if meta_file:
             meta_data = json.load(open(meta_file))
-            self.id2label = meta_data['Int_to_label']
+            filename = path.basename(data_path)
+            if 'Label_to_int' in meta_data and not filename.startswith('onehot'):
+                self.id2label = {v: k for k, v in meta_data['Label_to_int'].items()}
 
         elif int_to_label:
             self.id2label = int_to_label
@@ -360,7 +362,6 @@ class DataHandler():
             except AttributeError:
                 pass
 
-
         meta_file = path.join(save_path, f'meta.json')
 
         with open(meta_file, 'w') as f:
@@ -421,6 +422,19 @@ class DataHandler():
         self.nr_classes = self._determine_nr_classes()
         return self.use_val
 
+    def count_label(self, label: str) -> int:
+        """ Count the number of occurences of a label in the dataset."""
+        if self.is_multilabel:
+            return self.df[self.LABEL_COL].apply(lambda x: x[label]==1).sum()
+        else:
+            return self.df[self.LABEL_COL].apply(lambda x: x == label).sum()
+    
+    def print_label_dist(self) -> None:
+        """ Print the distribution of labels in the dataset using id2label."""
+        for id, label in self.id2label.items():
+            count = self.count_label(id)
+            print(f'{label}: {count}')
+    
     @abstractmethod
     def read_in_data(self, data_path: str) -> pd.DataFrame:
         """ Read in the data from a given path and return a pandas DataFrame, with columns 'id', 'text' and 'labels'. 
@@ -473,6 +487,27 @@ class PsyNamicSingleLabel(DataHandler):
         return df
 
 
+class PsyNamicMultiLabel(DataHandler):
+
+    def __init__(self, data_path: str, meta_file: Optional[str] = None) -> None:
+        filename = path.basename(data_path)
+        meta_file = data_path.replace('.csv', '_meta.json')
+        super().__init__(data_path, meta_file=meta_file)
+
+    def read_in_data(self, data_path: str) -> pd.DataFrame:
+        df = pd.read_csv(data_path)
+        label_cols = df.columns[df.columns.get_loc(self.ANNOTATOR_COL)+1:]
+        self.id2label = {i: col for i, col in enumerate(label_cols)}
+
+        def to_one_hot_encoded(row):
+            return row[label_cols].values.tolist()
+
+        # Apply the function to each row and create a new 'labels' column
+        df[self.LABEL_COL] = df.apply(to_one_hot_encoded, axis=1)
+        df = df[[self.ID_COL, self.TEXT_COL, self.LABEL_COL]]
+        return df
+
+
 class PsychNamicBIOHandler(DataHandler):
     pass
 
@@ -491,17 +526,18 @@ class PsychNamicRelevant(DataHandler):
 
     def read_in_data(self, data_path: str) -> pd.DataFrame:
         df = pd.read_csv(data_path)
-        # keep relevant 0/1 only (empty rows are dropped)
-        df = df[df[self.rel_col].notna()]
+        # Use .copy() to ensure we're working with a copy
+        df = df[df[self.rel_col].notna()].copy()
         df[self.rel_col] = df[self.rel_col].astype(int)
-        df = df[[self.id_col, self.title_col, self.abst_col, self.rel_col]]
-        df[self.TEXT_COL] = df[self.title_col] + '.^\\n' + df[self.abst_col]
-        # drop title and abstract columns
+        df = df[[self.id_col, self.title_col,
+                 self.abst_col, self.rel_col]].copy()
+        df.loc[:, self.TEXT_COL] = df[self.title_col] + \
+            '.^\n' + df[self.abst_col]
         df.drop(columns=[self.title_col, self.abst_col], inplace=True)
         df.rename(columns={self.id_col: self.ID_COL,
                   self.rel_col: self.LABEL_COL}, inplace=True)
-        # remove all rows with NaN values in any column
         df.dropna(inplace=True)
+
         return df
 
 
