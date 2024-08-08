@@ -34,11 +34,7 @@ MODEL_IDENTIFIER = {
     'biolinkbert': 'michiyasunaga/BioLinkBERT-base',
 }
 
-# os.environ['WANDB_PROJECT'] = "psynamic"
-# os.environ['WANDB_LOG_MODEL'] = "checkpoint"
-os.environ['WANDV_MODE'] = 'offline'
-os.environ['WANDB_DISABLED'] = 'true'
-
+os.environ['WANDB_PROJECT'] = "psynamic"
 # TODO: Enable cross validation
 # TODO: enable all hyperparameters
 # TODO: Hyperparameter tune
@@ -149,8 +145,7 @@ def train(
         eval_strategy="epoch" if val_dataset is not None else "no",  # Conditionally set evaluation strategy
         save_strategy="epoch",
         load_best_model_at_end=True,
-        # report_to='wandb',
-        report_to='none',
+        report_to='wandb',
         logging_dir=project_dir,
         logging_strategy="epoch",
         run_name=os.path.basename(project_dir),
@@ -171,7 +166,7 @@ def train(
         labels = pred.label_ids
         preds = pred.predictions.argmax(-1)
         accuracy = accuracy_score(labels, preds)
-        precision = precision_score(labels, preds, average='weighted')
+        precision = precision_score(labels, preds, average='weighted', zero_division=0)
         recall = recall_score(labels, preds, average='weighted')
         f1 = f1_score(labels, preds, average='weighted')
         return {
