@@ -207,6 +207,7 @@ pip-selfcheck.json
 
 docker-compose.yml
 prodigy_data/
-.vscode/
-
+vscode/*
+vscode/launch.json
 model/experiments/*
+wandb/*
