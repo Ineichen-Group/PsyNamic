@@ -39,7 +39,6 @@ MODEL_IDENTIFIER = {
 os.environ['WANDV_MODE'] = 'offline'
 os.environ['WANDB_DISABLED'] = 'true'
 
-# TODO: Enable using val dataset
 # TODO: Enable cross validation
 # TODO: enable all hyperparameters
 # TODO: Hyperparameter tune
@@ -271,7 +270,7 @@ def finetune(args: argparse.Namespace) -> None:
     save_train_args(project_path, args)
     train_dataset, test_dataset, val_dataset = load_data(args.data)
     trainer = train(project_path, train_dataset, test_dataset, args, val_dataset=val_dataset)
-    evaluate(project_path, trainer)
+    evaluate(project_path, trainer, test_dataset)
 
 
 #  MODE = 'cont_train', e.g. python model/model.py --mode cont_train --load model/experiments/pubmedbert_relevant_sample_20240730/checkpoint-565
