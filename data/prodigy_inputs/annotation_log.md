@@ -9,28 +9,29 @@
 
 ## Real Annotation
 
-| Prodigy Version | Dataset Input                                     | Size  | Status        | Annotator(s)             | Annotations Received    |
-| --------------- | ------------------------------------------------- | ----- | ------------- | ------------------------ | ----------------------- |
-| V4              | psychedelic_study_50_20240418.jsonl               | 50    | Done          | Ben, Pia, Julia, Bernard | x, x, x, x              |
-| V4              | psychedelic_study_100_20240418.jsonl              | 100   | Done          | Ben                      | x, tbr                  |
-| V4              | psychedelic_study_50_20240418_review.jsonl        | 50    | Done          | Ben, Pia, Julia, Bernard | U                       |
-| -----------     | -----------                                       | ----- | -----------   | -----------              | -----------             |
-| V5              | psychedelic_study_250_20240423_113435.jsonl       | 250   | In Progress   | Julia                    |                         |
-| V5              | psychedelic_study_250_20240423_113436.jsonl       | 250   | Done (52/250) | Bernard                  | tbr                     |
-| V5              | psychedelic_study_250_20240423_113437.jsonl       | 250   | Done          | Pia                      | x, U tbr?               |
-| V5              | psychedelic_study_95_20240423_113434.jsonl        | 95    | Done          | Ben                      | U                       |
-| -----------     | -----------                                       | ----- | -----------   | -----------              | -----------             |
-| V6 / Review     | psychedelic_study_24_20240425_152801.jsonl        | 24    | Done          | Ben                      | U -> 11 samples doubled |
-| -----------     | -----------                                       | ----- | -----------   | -----------              | -----------             |
-| V7              | psychedelic_study_250_20240523_195806.jsonl       | 250   | In Progress   | Ben                      |                         |
-| V7              | psychedelic_study_40_20240523_195805.jsonl        | 40    | Done          | Pia, Ben                 | x, x                    |
-| -----------     | -----------                                       | ----- | -----------   | -----------              | -----------             |
-| V8              | psychedelic_study_40_20240620_145100.jsonl        | 40    | In Progress   | Pia, Ben                 | x                       |
-| V8              | psychedelic_study_40_20240523_195805_review.jsonl | 40    | Done          | Pia, Ben                 | U                       |
-| -----------     | -----------                                       | ----- | -----------   | -----------              | -----------             |
-| V9              | psychedelic_study_250_20240730_095458.jsonl       | 250   | In Progress   | Pia                      |                         |
+| Prodigy Version | Dataset Input                                     | Size  | Status         | Annotator(s)             | Annotations Received    |
+| --------------- | ------------------------------------------------- | ----- | -------------- | ------------------------ | ----------------------- |
+| V4              | psychedelic_study_50_20240418.jsonl               | 50    | Done           | Ben, Pia, Julia, Bernard | x, x, x, x              |
+| V4              | psychedelic_study_50_20240418_review.jsonl        | 50    | Done           | Ben, Pia, Julia, Bernard | U                       |
+| V4              | psychedelic_study_100_20240418.jsonl              | 100   | Done           | Ben                      | x, tbr                  |
+| -----------     | -----------                                       | ----- | -----------    | -----------              | -----------             |
+| V5              | psychedelic_study_250_20240423_113435.jsonl       | 250   | Done (110/250) | Julia                    | tbr                     |
+| V5              | psychedelic_study_250_20240423_113436.jsonl       | 250   | Done (52/250)  | Bernard                  | tbr                     |
+| V5              | psychedelic_study_250_20240423_113437.jsonl       | 250   | Done           | Pia                      | x, U tbr?               |
+| V5              | psychedelic_study_95_20240423_113434.jsonl        | 95    | Done           | Ben                      | U                       |
+| -----------     | -----------                                       | ----- | -----------    | -----------              | -----------             |
+| V6 / Review     | psychedelic_study_24_20240425_152801.jsonl        | 24    | Done           | Ben                      | U -> 11 samples doubled |
+| -----------     | -----------                                       | ----- | -----------    | -----------              | -----------             |
+| V7              | psychedelic_study_250_20240523_195806.jsonl       | 250   | In Progress    | Ben                      |                         |
+| V7              | psychedelic_study_40_20240523_195805.jsonl        | 40    | Done           | Pia, Ben                 | x, x                    |
+| -----------     | -----------                                       | ----- | -----------    | -----------              | -----------             |
+| V8              | psychedelic_study_40_20240620_145100.jsonl        | 40    | In Progress    | Pia, Ben                 | x                       |
+| V8              | psychedelic_study_40_20240523_195805_review.jsonl | 40    | Done           | Pia, Ben                 | U                       |
+| -----------     | -----------                                       | ----- | -----------    | -----------              | -----------             |
+| V9              | psychedelic_study_250_20240730_095458.jsonl       | 250   | In Progress    | Pia                      |                         |
 
-Current Total annotated: 1108
+Current Total annotated: 100 + 50 + 100 + 52 + 250 + 250 + 95 + 24 + 40 = 961
+Has to be reannotated (earlier annotation guidelines or not cross-checked): 100 + 100 + 52 + 250 = 502
 Current Total with last annotation standard: 95 + 50 + 24 + 40 + 250 = 459
 
 Need to be reannotated: 200

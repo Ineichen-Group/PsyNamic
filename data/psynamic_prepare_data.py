@@ -12,6 +12,14 @@ PRODIGY_INPUTS_DIR = 'prodigy_inputs/'
 ANNOTATION_GROUPS = ['Study Characteristics',
                      'Substance(s)', 'Clinical Measure']
 
+# Script to prepare data for annotation in Prodigy which includes:
+# 1. Combining title and abstract into a single text column
+# 2. Getting the URL of the article on PubMed
+# 3. Generating a random subsample of articles for annotation
+# 4. Generating an annotation log to keep track of annotated articles
+# 5. Updating the annotation log after each annotation round
+# 6. Some more helper functions to manage the annotation process
+
 
 def get_url(doi: str) -> str:
     """Get the link to pubmed of the article with the given DOI."""
