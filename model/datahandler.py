@@ -48,9 +48,6 @@ class DataSplit(Dataset):
         if self.is_multilabel:
             labels = ast.literal_eval(labels)
 
-        # in case of multilabel classification, convert labels to tensor
-        # if isinstance(labels, list):
-        #     labels = torch.tensor(labels)
         try:
             # TODO: save data encoded to save time
             encoding = self.tokenizer.encode_plus(
@@ -69,7 +66,7 @@ class DataSplit(Dataset):
         return {
             'input_ids': encoding['input_ids'].flatten(),
             'attention_mask': encoding['attention_mask'].flatten(),
-            'labels': torch.tensor(labels, dtype=torch.long)
+            'labels': torch.tensor(labels, dtype=torch.float32)
         }
 
     def __eq__(self, other) -> bool:
@@ -100,9 +97,11 @@ class DataSplit(Dataset):
     @property
     def labels(self) -> list[int]:
         if self.is_multilabel:
-            label_tuples = self.df['labels'].apply(tuple)
-            unique_labels = set(label_tuples)
-            return list(unique_labels)
+            # get first row of labels
+            labels = self.df[self.LABEL_COL].iloc[0]
+            labels = ast.literal_eval(labels)
+            return labels
+            
         else:
             label_list = self.df[self.LABEL_COL].unique().tolist()
             label_list.sort()
@@ -134,7 +133,7 @@ class DataHandler():
             meta_data = json.load(open(meta_file))
             filename = path.basename(data_path)
             self.is_multilabel = meta_data['Is_multilabel']
-            if not self.is_multilabel:
+            if "Int_to_label" in meta_data:
                 self.id2label = meta_data['Int_to_label']
                 self.nr_classes = len(self.id2label)
 
@@ -148,10 +147,8 @@ class DataHandler():
         # (if it's a directory instead, it's assumed that the splits are already saved in the directory)
         if path.isfile(data_path):
             self.df = self.read_in_data(data_path)
-        
-
-        if not self.nr_classes:
-            self.nr_classes = self._determine_nr_classes()
+            if not self.nr_classes:
+                self.nr_classes = self._determine_nr_classes()
          
         self.train = None
         self.test = None

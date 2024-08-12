@@ -7,7 +7,7 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -21,6 +21,8 @@ from transformers import (
 from confidenceinterval import classification_report_with_ci
 from datahandler import DataHandler, PsychNamicRelevant, PsyNamicSingleLabel, DataSplit
 from abc import ABC, abstractmethod
+
+# rf. https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/BERT/Fine_tuning_BERT_(and_friends)_for_multi_label_text_classification.ipynb#scrollTo=797b2WHJqUgZ for multilabel tuning
 
 
 EXPERIMENT_PATH = './model/experiments'
@@ -143,7 +145,7 @@ def train(
         model = BertForSequenceClassification.from_pretrained(
             model_id, num_labels=train_dataset.nr_labels,
             problem_type=problem_type).to(device)
-        tokenizer = BertTokenizer.from_pretrained(model_id, )
+        tokenizer = BertTokenizer.from_pretrained(model_id)
 
     training_args = TrainingArguments(
         output_dir=project_dir,
@@ -186,6 +188,36 @@ def train(
             'recall': recall,
             'f1': f1
         }
+        
+    
+    def multi_label_metrics(pred):
+        threshold = 0.5
+        # Apply sigmoid to predictions
+        sigmoid = torch.nn.Sigmoid()
+        probs = sigmoid(torch.Tensor(pred.predictions))
+        labels = pred.label_ids
+        # Apply threshold to convert probabilities to binary predictions
+        y_pred = np.zeros(probs.shape)
+        y_pred[np.where(probs >= threshold)] = 1
+        
+        # Calculate metrics
+        y_true = labels
+        f1_micro_average = f1_score(y_true=y_true, y_pred=y_pred, average='micro')
+        roc_auc = roc_auc_score(y_true, y_pred, average='micro')
+        accuracy = accuracy_score(y_true, y_pred)
+        precision = precision_score(y_true, y_pred, average='micro')
+        recall = recall_score(y_true, y_pred, average='micro')
+        
+        # Return metrics as a dictionary
+        metrics = {
+            'f1': f1_micro_average,
+            'roc_auc': roc_auc,
+            'accuracy': accuracy,
+            'precision': precision,
+            'recall': recall
+        }
+        
+        return metrics
 
     # Initialize the Trainer
     trainer = Trainer(
@@ -195,7 +227,7 @@ def train(
         # Conditionally pass validation dataset
         eval_dataset=val_dataset if val_dataset is not None else None,
         tokenizer=tokenizer,
-        compute_metrics=compute_metrics,
+        compute_metrics=compute_metrics if not is_multilable else multi_label_metrics,
         optimizers=(optimizer, scheduler),
     )
 
