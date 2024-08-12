@@ -1,6 +1,7 @@
 import json
 from collections import OrderedDict
 import os
+import random
 
 synonyms = {
     'substance: ketamine': 'substances: ketamine',
@@ -31,9 +32,9 @@ files_to_double_annotate = [
 ]
 
 styling_helper_file = 'data/prodigy_exports/prodigy_export_julia_250_20240423_113435_20240812_012727.jsonl'
-
 annotation_tasks = 'prodigy/choice_labels.json'
-outfile = 'data/prodigy_exports/prodigy_export_double_annotated.jsonl'
+outfile = 'data/prodigy_exports/prodigy_export_double_annotated_20240812.jsonl'
+
 # if already exists, delete it
 try:
     os.remove(outfile)
@@ -73,6 +74,8 @@ for k, v in cur_id2task.items():
     if v != new_id2taskstyle[k]:
         print(f"Warning: {v} != {new_id2taskstyle[k]}")
 
+all_data = []
+
 with open(outfile, 'w', encoding='utf-8') as out:
     for file in files_to_double_annotate:
         id2task, _ = get_id2label_from_jsonl(file)
@@ -94,8 +97,10 @@ with open(outfile, 'w', encoding='utf-8') as out:
                             unknown.add(task)
 
                 line['accept'] = new_accepted
-                # write to file
-                out.write(json.dumps(line, ensure_ascii=False))
-                out.write('\n')
+                all_data.append(line)
+    # write to file in random order:
+    random.shuffle(all_data)
+    for line in all_data:
+        out.write(json.dumps(line, ensure_ascii=False) + '\n')
 
 print(unknown)
