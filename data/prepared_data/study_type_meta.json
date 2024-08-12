@@ -1,5 +1,5 @@
 {
-    "Date": "20240808",
+    "Date": "20240812",
     "Task": "Study Type",
     "Files": [
         "data/prodigy_exports/prodigy_export_ben_95_20240423_113434.jsonl",
@@ -9,15 +9,16 @@
         "data/prodigy_exports/prodigy_export_pia_250_20240423_113437_20240720_135743.jsonl"
     ],
     "Size": 433,
-    "Label_to_int": {
-        "Case report": 0,
-        "Case series": 1,
-        "Cohort study": 2,
-        "Other": 3,
-        "Qualitative Study": 4,
-        "Randomized-controlled trial (RCT)": 5,
-        "Real-world study": 6,
-        "Study protocol": 7,
-        "Systematic review/meta-analysis": 8
+    "Is_multilabel": false,
+    "Int_to_label": {
+        "0": "Case report",
+        "1": "Case series",
+        "2": "Cohort study",
+        "3": "Other",
+        "4": "Qualitative Study",
+        "5": "Randomized-controlled trial (RCT)",
+        "6": "Real-world study",
+        "7": "Study protocol",
+        "8": "Systematic review/meta-analysis"
     }
 }

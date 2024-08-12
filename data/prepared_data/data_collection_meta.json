@@ -1,5 +1,5 @@
 {
-    "Date": "20240808",
+    "Date": "20240812",
     "Task": "Data Collection",
     "Files": [
         "data/prodigy_exports/prodigy_export_ben_95_20240423_113434.jsonl",
@@ -9,10 +9,11 @@
         "data/prodigy_exports/prodigy_export_pia_250_20240423_113437_20240720_135743.jsonl"
     ],
     "Size": 433,
-    "Label_to_int": {
-        "Not applicable": 0,
-        "Prospective": 1,
-        "Retrospective": 2,
-        "Unknown": 3
+    "Is_multilabel": false,
+    "Int_to_label": {
+        "0": "Not applicable",
+        "1": "Prospective",
+        "2": "Retrospective",
+        "3": "Unknown"
     }
 }

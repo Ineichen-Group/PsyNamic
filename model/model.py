@@ -39,26 +39,27 @@ os.environ['WANDB_PROJECT'] = "psynamic"
 # TODO: enable all hyperparameters
 # TODO: Hyperparameter tune
 
+
 class CustomTrainer:
 
     def __innit__(self, arg: argparse.Namespace):
         pass
-    
-    @abstractmethod    
+
+    @abstractmethod
     def train(self):
         pass
-    
+
     @abstractmethod
     def save_model(self):
         pass
-    
+
     @abstractmethod
     def load_model(self):
         pass
 
 
 class BertTrainer(CustomTrainer):
-    
+
     pass
 
 
@@ -88,7 +89,8 @@ def init_argparse():
     parser.add_argument('--gradient_clipping', type=float, default=0.1)
     parser.add_argument(
         '--metrics', type=list[str], default=['accuracy', 'precision', 'recall', 'f1'])
-    parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
+    parser.add_argument('--device', type=str,
+                        choices=['cpu', 'cuda'], default='cuda')
 
     # CONT_TRAIN
     parser.add_argument('--load', type=str, default=None)  # Experiment folder
@@ -111,11 +113,11 @@ def init_directories(model: str, task: str) -> str:
     return project_dir
 
 
-def load_data(data: str):
-    meta_file = os.path.join(data, 'meta.json')
+def load_data(data: str, meta_file: str) -> tuple[DataSplit, DataSplit, DataSplit]:
     datahandler = DataHandler(data, meta_file=meta_file)
-    use_vale = datahandler.load_splits(data)
-    train_dataset, test_dataset, eval_dataset = datahandler.get_strat_split(use_val=use_vale)
+    use_val = datahandler.load_splits(data)
+    train_dataset, test_dataset, eval_dataset = datahandler.get_strat_split(
+        use_val=use_val)
     return train_dataset, test_dataset, eval_dataset
 
 
@@ -125,24 +127,31 @@ def train(
     test_dataset,
     args,
     val_dataset=None,  # Optional parameter for validation dataset
-    resume_from_checkpoint=False
+    resume_from_checkpoint=False,
+    is_multilable=False
 ) -> Trainer:
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
+    problem_type = "single_label_classification" if not is_multilable else "multi_label_classification"
+
     if resume_from_checkpoint:
-        model = AutoModelForSequenceClassification.from_pretrained(args.load).to(device)
+        model = AutoModelForSequenceClassification.from_pretrained(
+            args.load,
+            problem_type=problem_type).to(device)
         tokenizer = AutoTokenizer.from_pretrained(args.load)
     else:
         model_id = MODEL_IDENTIFIER[args.model]
-        tokenizer = BertTokenizer.from_pretrained(model_id)
         model = BertForSequenceClassification.from_pretrained(
-            model_id, num_labels=train_dataset.nr_labels).to(device)
+            model_id, num_labels=train_dataset.nr_labels,
+            problem_type=problem_type).to(device)
+        tokenizer = BertTokenizer.from_pretrained(model_id, )
 
     training_args = TrainingArguments(
         output_dir=project_dir,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
-        eval_strategy="epoch" if val_dataset is not None else "no",  # Conditionally set evaluation strategy
+        # Conditionally set evaluation strategy
+        eval_strategy="epoch" if val_dataset is not None else "no",
         save_strategy="epoch",
         load_best_model_at_end=True,
         report_to='wandb',
@@ -154,7 +163,8 @@ def train(
     )
 
     total_steps = len(train_dataset) * args.epochs
-    optimizer = AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    optimizer = AdamW(model.parameters(), lr=args.learning_rate,
+                      weight_decay=args.weight_decay)
     scheduler = get_linear_schedule_with_warmup(
         optimizer,
         num_warmup_steps=int(training_args.warmup_ratio * total_steps),
@@ -166,7 +176,8 @@ def train(
         labels = pred.label_ids
         preds = pred.predictions.argmax(-1)
         accuracy = accuracy_score(labels, preds)
-        precision = precision_score(labels, preds, average='weighted', zero_division=0)
+        precision = precision_score(
+            labels, preds, average='weighted', zero_division=0)
         recall = recall_score(labels, preds, average='weighted')
         f1 = f1_score(labels, preds, average='weighted')
         return {
@@ -181,31 +192,34 @@ def train(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        eval_dataset=val_dataset if val_dataset is not None else None,  # Conditionally pass validation dataset
+        # Conditionally pass validation dataset
+        eval_dataset=val_dataset if val_dataset is not None else None,
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,
         optimizers=(optimizer, scheduler),
     )
 
     if args.early_stopping_patience > 0 and val_dataset is not None:
-        trainer.add_callback(EarlyStoppingCallback(early_stopping_patience=args.early_stopping_patience))
+        trainer.add_callback(EarlyStoppingCallback(
+            early_stopping_patience=args.early_stopping_patience))
 
     # Train the model
     trainer.train()
 
     return trainer
 
+
 def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> str:
     # Get predictions
     predictions = trainer.predict(test_dataset)
     labels = predictions.label_ids
     preds = predictions.predictions.argmax(-1)
-    
+
     # Calculate probabilities using softmax
     logits = predictions.predictions
     probabilities = np.exp(logits - np.max(logits, axis=-1, keepdims=True))
     probabilities /= probabilities.sum(axis=-1, keepdims=True)
-    
+
     # Prepare lists for DataFrame
     data = []
     for i, (id, text, label) in enumerate(test_dataset):
@@ -218,26 +232,26 @@ def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> 
             "probability": probability,
             "label": label
         })
-    
+
     # Create DataFrame
     df = pd.DataFrame(data)
-    
+
     # Save DataFrame to CSV
     output_file = os.path.join(project_folder, 'predictions.csv')
     df.to_csv(output_file, index=False)
-    
+
     # Compute classification report and save to CSV
     y_true = labels
     y_predicted = preds
     # if there is only one class, the classification report cannot be computed
     if len(set(y_predicted)) == 1:
         print('Only one class present in the predictions, classification report cannot be computed.')
-        
+
     else:
         report_df = classification_report_with_ci(y_true, y_predicted)
         report_file = os.path.join(project_folder, 'classification_report.csv')
         pd.DataFrame(report_df).to_csv(report_file)
-    
+
     return output_file
 
 
@@ -245,21 +259,22 @@ def set_args_from_file(args: argparse.Namespace) -> argparse.Namespace:
     params_json = os.path.join(os.path.dirname(args.load), 'params.json')
     with open(params_json, 'r') as f:
         params = json.load(f)
-    
+
     ignore = ['mode', 'load']
     if args.data is not None:
         ignore.append('data')
 
     for key, value in params.items():
         if key not in ignore:
-            setattr(args, key, value)        
+            setattr(args, key, value)
 
     return args
 
 
 def load_model(args: argparse.Namespace) -> Trainer:
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
-    model = AutoModelForSequenceClassification.from_pretrained(args.load).to(device)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        args.load).to(device)
     trainer = Trainer(model=model)
     return trainer
 
@@ -268,17 +283,24 @@ def load_model(args: argparse.Namespace) -> Trainer:
 def finetune(args: argparse.Namespace) -> None:
     project_path = init_directories(args.model, args.task)
     save_train_args(project_path, args)
-    train_dataset, test_dataset, val_dataset = load_data(args.data)
-    trainer = train(project_path, train_dataset, test_dataset, args, val_dataset=val_dataset)
+    meta_file = os.path.join(args.data, 'meta.json')
+    meta_data = json.load(open(meta_file, 'r'))
+    # TODO: solve it nice that meta data is not loaded twice
+    train_dataset, test_dataset, val_dataset = load_data(args.data, meta_file)
+    trainer = train(project_path, train_dataset, test_dataset,
+                    args, val_dataset=val_dataset, is_multilable=meta_data['Is_multilabel'])
     evaluate(project_path, trainer, test_dataset)
 
 
 #  MODE = 'cont_train', e.g. python model/model.py --mode cont_train --load model/experiments/pubmedbert_relevant_sample_20240730/checkpoint-565
 def cont_finetune(args: argparse.Namespace) -> None:
     args = set_args_from_file(args)
-    train_dataset, test_dataset, eval_dataloader = load_data(args.data)
+    meta_file = os.path.join(args.data, 'meta.json')
+    meta_data = json.load(open(meta_file, 'r'))
+    train_dataset, test_dataset, eval_dataloader = load_data(
+        args.data, meta_file)
     trainer = train(args.load, train_dataset, test_dataset,
-                    args, resume_from_checkpoint=True)
+                    args, resume_from_checkpoint=True, is_multilable=meta_data['Is_multilabel'])
     evaluate(args.load, trainer, test_dataset)
 
 
@@ -301,17 +323,17 @@ def main():
         if args.load is None or not os.path.exists(args.load):
             raise ValueError(
                 'Please provide the correct path to the experiment folder to continue training')
-        
+
         cont_finetune(args)
 
     elif args.mode == 'eval':
         if args.load is None or not os.path.exists(args.load):
             raise ValueError(
                 'Please provide the correct path to the experiment folder to continue training')
-        
+
         if args.data is None:
             print('Defaulting to test data split used for training')
-            
+
         load_and_evaluate(args)
 
 

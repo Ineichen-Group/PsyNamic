@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 import csv
+import ast
 from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
 from torch.utils.data import Dataset
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold, MultilabelStratifiedShuffleSplit
@@ -43,6 +44,9 @@ class DataSplit(Dataset):
     def __getitem__(self, idx: int) -> dict:
         text = self.df.iloc[idx][self.TEXT_COL]
         labels = self.df.iloc[idx][self.LABEL_COL]
+        
+        if self.is_multilabel:
+            labels = ast.literal_eval(labels)
 
         # in case of multilabel classification, convert labels to tensor
         # if isinstance(labels, list):
@@ -52,7 +56,7 @@ class DataSplit(Dataset):
             encoding = self.tokenizer.encode_plus(
                 text,
                 add_special_tokens=True,
-                max_length=self.max_len,
+                max_length=self.max_len, # TODO: Check if max length is correct
                 return_token_type_ids=False,
                 padding='max_length',
                 return_attention_mask=True,
@@ -119,25 +123,36 @@ class DataHandler():
     ANNOTATOR_COL = 'annotator'
 
     def __init__(self, data_path: str = None, meta_file: str = None, int_to_label: str = None) -> None:
+        self.nr_classes = False       
+        
         # Provide either meta_file or int_to_label
         if not meta_file and not int_to_label:
             raise ValueError(
                 'Provide either a meta_file or int_to_label dictionary.')
+            
         if meta_file:
             meta_data = json.load(open(meta_file))
             filename = path.basename(data_path)
-            if 'Label_to_int' in meta_data and not filename.startswith('onehot'):
-                self.id2label = {v: k for k, v in meta_data['Label_to_int'].items()}
+            self.is_multilabel = meta_data['Is_multilabel']
+            if not self.is_multilabel:
+                self.id2label = meta_data['Int_to_label']
+                self.nr_classes = len(self.id2label)
 
         elif int_to_label:
             self.id2label = int_to_label
-
-        # if it is a file, and not a folder
-        if path.isfile(data_path):
             self.df = self.read_in_data(data_path)
             self.is_multilabel = self._check_if_multilabel()
             self.nr_classes = self._determine_nr_classes()
+            
+        # Case where data is provided unsplitted
+        # (if it's a directory instead, it's assumed that the splits are already saved in the directory)
+        if path.isfile(data_path):
+            self.df = self.read_in_data(data_path)
+        
 
+        if not self.nr_classes:
+            self.nr_classes = self._determine_nr_classes()
+         
         self.train = None
         self.test = None
         self.val = None
@@ -188,9 +203,9 @@ class DataHandler():
                 return False
         if reuse():
             if use_val:
-                return DataSplit(self.train, self.id2label), DataSplit(self.test, self.id2label), DataSplit(self.val, self.id2label)
+                return DataSplit(self.train, self.id2label, self.is_multilabel), DataSplit(self.test, self.id2label, self.is_multilabel), DataSplit(self.val, self.id2label, self.is_multilabel)
             else:
-                return DataSplit(self.train, self.id2label), DataSplit(self.test, self.id2label), None
+                return DataSplit(self.train, self.id2label, self.is_multilabel), DataSplit(self.test, self.id2label, self.is_multilabel), None
         else:
             self.train_size = train_size
             self.use_val = use_val
@@ -418,8 +433,6 @@ class DataHandler():
                 raise FileNotFoundError(
                     f'No train/test/val files found in {load_path}.')
 
-        self.is_multilabel = self._check_if_multilabel()
-        self.nr_classes = self._determine_nr_classes()
         return self.use_val
 
     def count_label(self, label: str) -> int:
@@ -432,7 +445,7 @@ class DataHandler():
     def print_label_dist(self) -> None:
         """ Print the distribution of labels in the dataset using id2label."""
         for id, label in self.id2label.items():
-            count = self.count_label(id)
+            count = self.count_label(int(id))
             print(f'{label}: {count}')
     
     @abstractmethod
@@ -563,39 +576,41 @@ class DummyDataHandler(DataHandler):
 
 
 def main():
-    pseudopath = 'imaginary_file.jsonl'
-    # my_datahanlder = DataHandler(pseudopath)
+    pass
+    # TODO: Update this main function to test the DataHandler class
+    # pseudopath = 'imaginary_file.jsonl'
+    # # my_datahanlder = DataHandler(pseudopath)
 
-    # Test stratified split
-    my_datahandler = DataHandler()
-    train, test, val = my_datahandler.get_strat_split()
-    my_datahandler.save_split('./data/annotated_data/test_split')
-    my_second_datahandler = DataHandler()
-    my_second_datahandler.load_splits('./data/annotated_data/test_split')
-    train, test, val = my_second_datahandler.get_strat_split()
+    # # Test stratified split
+    # my_datahandler = DataHandler()
+    # train, test, val = my_datahandler.get_strat_split()
+    # my_datahandler.save_split('./data/annotated_data/test_split')
+    # my_second_datahandler = DataHandler()
+    # my_second_datahandler.load_splits('./data/annotated_data/test_split')
+    # train, test, val = my_second_datahandler.get_strat_split()
 
-    # Test stratified with val split
-    datahandler = DataHandler()
-    train, test, val = datahandler.get_strat_split(
-        train_size=0.6, use_val=True)
-    datahandler.save_split('./data/annotated_data/test_split')
-    my_second_datahandler = DataHandler()
-    my_second_datahandler.load_splits('./data/annotated_data/test_split')
-    train, test, val = my_second_datahandler.get_strat_split(use_val=True)
+    # # Test stratified with val split
+    # datahandler = DataHandler()
+    # train, test, val = datahandler.get_strat_split(
+    #     train_size=0.6, use_val=True)
+    # datahandler.save_split('./data/annotated_data/test_split')
+    # my_second_datahandler = DataHandler()
+    # my_second_datahandler.load_splits('./data/annotated_data/test_split')
+    # train, test, val = my_second_datahandler.get_strat_split(use_val=True)
 
-    # Test k-fold split
-    dataHandler = DataHandler()
-    dataHandler.get_strat_k_fold_split()
-    dataHandler.save_split('./data/annotated_data/test_split')
-    my_second_datahandler = DataHandler()
-    my_second_datahandler.load_splits('./data/annotated_data/test_split')
+    # # Test k-fold split
+    # dataHandler = DataHandler()
+    # dataHandler.get_strat_k_fold_split()
+    # dataHandler.save_split('./data/annotated_data/test_split')
+    # my_second_datahandler = DataHandler()
+    # my_second_datahandler.load_splits('./data/annotated_data/test_split')
 
-    # Test k-fold split with val
-    dataHandler = DataHandler()
-    dataHandler.get_strat_k_fold_split(use_val=True)
-    dataHandler.save_split('./data/annotated_data/test_split')
-    my_second_datahandler = DataHandler()
-    my_second_datahandler.load_splits('./data/annotated_data/test_split')
+    # # Test k-fold split with val
+    # dataHandler = DataHandler()
+    # dataHandler.get_strat_k_fold_split(use_val=True)
+    # dataHandler.save_split('./data/annotated_data/test_split')
+    # my_second_datahandler = DataHandler()
+    # my_second_datahandler.load_splits('./data/annotated_data/test_split')
 
 
 if __name__ == '__main__':

@@ -5,9 +5,6 @@ import time
 import json
 import pandas as pd
 
-# TODO: add meta file to directory with splits (containing split information, task, file, int_to_label)
-
-
 def prepare_train_data(list_jsonl: list[str], annotators: list[str]) -> None:
     prodigy_data = ProdigyDataCollector(list_jsonl, annotators)
     tasks = prodigy_data.tasks.keys()
@@ -20,8 +17,8 @@ def prepare_train_data(list_jsonl: list[str], annotators: list[str]) -> None:
             "Task": task,
             "Files": list_jsonl,
             "Size": len(prodigy_data),
+            "Is_multilabel": prodigy_data.is_multilabel(task)
         }
-
         if prodigy_data.is_multilabel(task):
             meta_file = os.path.join(
                 prepared_data, f'onehot_{task_string}_meta.json')
@@ -34,11 +31,11 @@ def prepare_train_data(list_jsonl: list[str], annotators: list[str]) -> None:
         else:
             meta_file = os.path.join(
                 prepared_data, f'{task_string}_meta.json')
-            int_to_label, task_df = prodigy_data.get_label_task_df(task)
+            label_to_int, task_df = prodigy_data.get_label_task_df(task)
             task_df.to_csv(os.path.join(
                 prepared_data, f'{task_string}.csv'), index=False)
 
-            meta_data["Label_to_int"] = int_to_label
+            meta_data["Int_to_label"] = {v: k for k, v in label_to_int.items()}
             with open(meta_file, 'w') as f:
                 json.dump(meta_data, f, indent=4, ensure_ascii=False)
 

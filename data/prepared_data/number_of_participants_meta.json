@@ -1,5 +1,5 @@
 {
-    "Date": "20240808",
+    "Date": "20240812",
     "Task": "Number of Participants",
     "Files": [
         "data/prodigy_exports/prodigy_export_ben_95_20240423_113434.jsonl",
@@ -9,17 +9,18 @@
         "data/prodigy_exports/prodigy_export_pia_250_20240423_113437_20240720_135743.jsonl"
     ],
     "Size": 433,
-    "Label_to_int": {
-        "1-20": 0,
-        "100-199": 1,
-        "200-499": 2,
-        "21-40": 3,
-        "41-60": 4,
-        "500-999": 5,
-        "61-80": 6,
-        "81-100": 7,
-        "Not applicable": 8,
-        "Unknown": 9,
-        "≥1000": 10
+    "Is_multilabel": false,
+    "Int_to_label": {
+        "0": "1-20",
+        "1": "100-199",
+        "2": "200-499",
+        "3": "21-40",
+        "4": "41-60",
+        "5": "500-999",
+        "6": "61-80",
+        "7": "81-100",
+        "8": "Not applicable",
+        "9": "Unknown",
+        "10": "≥1000"
     }
 }
