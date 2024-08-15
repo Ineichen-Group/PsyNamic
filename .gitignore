@@ -211,3 +211,5 @@ vscode/*
 vscode/launch.json
 model/experiments/*
 wandb/*
+log/*
+training_scripts/*
