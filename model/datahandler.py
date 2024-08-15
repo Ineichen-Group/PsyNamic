@@ -66,7 +66,7 @@ class DataSplit(Dataset):
         return {
             'input_ids': encoding['input_ids'].flatten(),
             'attention_mask': encoding['attention_mask'].flatten(),
-            'labels': torch.tensor(labels, dtype=torch.float32)
+            'labels': torch.tensor(labels, dtype=torch.long)
         }
 
     def __eq__(self, other) -> bool:
