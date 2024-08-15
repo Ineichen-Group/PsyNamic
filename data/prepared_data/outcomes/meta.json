@@ -1,6 +1,6 @@
 {
     "Task": "PsyNamicMultiLabel",
-    "Date": "20240812",
+    "Date": "20240815",
     "Int_to_label": {
         "0": "The ability to drive a car",
         "1": "Suicide",
@@ -18,7 +18,8 @@
         "13": "Emergency department visits"
     },
     "Train_size": 346,
-    "Use_val": false,
+    "Use_val": true,
     "Is_multilabel": true,
-    "Test_size": 87
+    "Test_size": 46,
+    "Val_size": 41
 }

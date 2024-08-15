@@ -1,6 +1,6 @@
 {
     "Task": "PsyNamicMultiLabel",
-    "Date": "20240812",
+    "Date": "20240815",
     "Int_to_label": {
         "0": "Clinical",
         "1": "Naturalistic",
@@ -11,7 +11,8 @@
         "6": "Palliative Setting"
     },
     "Train_size": 346,
-    "Use_val": false,
+    "Use_val": true,
     "Is_multilabel": true,
-    "Test_size": 87
+    "Test_size": 45,
+    "Val_size": 42
 }

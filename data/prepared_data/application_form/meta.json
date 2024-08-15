@@ -1,6 +1,6 @@
 {
     "Task": "PsyNamicMultiLabel",
-    "Date": "20240812",
+    "Date": "20240815",
     "Int_to_label": {
         "0": "Oral",
         "1": "Nasal",
@@ -12,7 +12,8 @@
         "7": "Not applicable"
     },
     "Train_size": 344,
-    "Use_val": false,
+    "Use_val": true,
     "Is_multilabel": true,
-    "Test_size": 89
+    "Test_size": 46,
+    "Val_size": 43
 }

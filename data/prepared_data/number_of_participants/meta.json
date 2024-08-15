@@ -1,6 +1,6 @@
 {
     "Task": "PsyNamicSingleLabel",
-    "Date": "20240812",
+    "Date": "20240815",
     "Int_to_label": {
         "0": "1-20",
         "1": "100-199",
@@ -15,7 +15,8 @@
         "10": "≥1000"
     },
     "Train_size": 346,
-    "Use_val": false,
+    "Use_val": true,
     "Is_multilabel": false,
-    "Test_size": 87
+    "Test_size": 44,
+    "Val_size": 44
 }

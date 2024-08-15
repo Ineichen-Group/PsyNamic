@@ -44,16 +44,19 @@ class DataSplit(Dataset):
     def __getitem__(self, idx: int) -> dict:
         text = self.df.iloc[idx][self.TEXT_COL]
         labels = self.df.iloc[idx][self.LABEL_COL]
-        
+
         if self.is_multilabel:
             labels = ast.literal_eval(labels)
+            labels = torch.tensor(labels, dtype=torch.float32)
+        else:
+            labels = torch.tensor(labels, dtype=torch.long)
 
         try:
             # TODO: save data encoded to save time
             encoding = self.tokenizer.encode_plus(
                 text,
                 add_special_tokens=True,
-                max_length=self.max_len, # TODO: Check if max length is correct
+                max_length=self.max_len,  # TODO: Check if max length is correct
                 return_token_type_ids=False,
                 padding='max_length',
                 return_attention_mask=True,
@@ -66,7 +69,7 @@ class DataSplit(Dataset):
         return {
             'input_ids': encoding['input_ids'].flatten(),
             'attention_mask': encoding['attention_mask'].flatten(),
-            'labels': torch.tensor(labels, dtype=torch.long)
+            'labels': labels
         }
 
     def __eq__(self, other) -> bool:
@@ -101,7 +104,7 @@ class DataSplit(Dataset):
             labels = self.df[self.LABEL_COL].iloc[0]
             labels = ast.literal_eval(labels)
             return labels
-            
+
         else:
             label_list = self.df[self.LABEL_COL].unique().tolist()
             label_list.sort()
@@ -110,6 +113,15 @@ class DataSplit(Dataset):
     @property
     def nr_labels(self) -> int:
         return len(self.labels)
+
+    def overlap(self, others: list['DataSplit']) -> bool:
+        """Check if the IDs of the current DataSplit overlap with the IDs of other DataSplits."""
+        current_ids = set(self.df[self.ID_COL])
+        for other in others:
+            other_ids = set(other.df[self.ID_COL])
+            if current_ids.intersection(other_ids):
+                return True
+        return False
 
 
 class DataHandler():
@@ -122,13 +134,13 @@ class DataHandler():
     ANNOTATOR_COL = 'annotator'
 
     def __init__(self, data_path: str = None, meta_file: str = None, int_to_label: str = None) -> None:
-        self.nr_classes = False       
-        
+        self.nr_classes = False
+
         # Provide either meta_file or int_to_label
         if not meta_file and not int_to_label:
             raise ValueError(
                 'Provide either a meta_file or int_to_label dictionary.')
-            
+
         if meta_file:
             meta_data = json.load(open(meta_file))
             filename = path.basename(data_path)
@@ -142,14 +154,14 @@ class DataHandler():
             self.df = self.read_in_data(data_path)
             self.is_multilabel = self._check_if_multilabel()
             self.nr_classes = self._determine_nr_classes()
-            
+
         # Case where data is provided unsplitted
         # (if it's a directory instead, it's assumed that the splits are already saved in the directory)
         if path.isfile(data_path):
             self.df = self.read_in_data(data_path)
             if not self.nr_classes:
                 self.nr_classes = self._determine_nr_classes()
-         
+
         self.train = None
         self.test = None
         self.val = None
@@ -199,10 +211,19 @@ class DataHandler():
             else:
                 return False
         if reuse():
+            # check if there is overlap between the splits
+            train = DataSplit(self.train, self.id2label, self.is_multilabel)
+            test = DataSplit(self.test, self.id2label, self.is_multilabel)
+            val = DataSplit(self.val, self.id2label, self.is_multilabel)
             if use_val:
-                return DataSplit(self.train, self.id2label, self.is_multilabel), DataSplit(self.test, self.id2label, self.is_multilabel), DataSplit(self.val, self.id2label, self.is_multilabel)
+                if train.overlap([test, val]):
+                    raise ValueError('Overlap between splits detected.')
+                return train, test, val
             else:
-                return DataSplit(self.train, self.id2label, self.is_multilabel), DataSplit(self.test, self.id2label, self.is_multilabel), None
+                if train.overlap([test]):
+                    raise ValueError('Overlap between splits detected.')
+                return train, test, None
+
         else:
             self.train_size = train_size
             self.use_val = use_val
@@ -267,7 +288,13 @@ class DataHandler():
                 self.train = train_df
                 self.val = val_df
                 self.test = test_df
-                return DataSplit(train_df, self.id2label), DataSplit(test_df, self.id2label), DataSplit(val_df, self.id2label)
+
+                train = DataSplit(train_df, self.id2label, self.is_multilabel)
+                test = DataSplit(test_df, self.id2label, self.is_multilabel)
+                val = DataSplit(val_df, self.id2label, self.is_multilabel)
+                if train.overlap([test, val]):
+                    raise ValueError('Overlap between splits detected.')
+                return train, test, val
             else:
                 # Direct split: train (e.g. 80%) and test (e.g. 20%)
                 split = StratifiedShuffleSplit(
@@ -282,8 +309,10 @@ class DataHandler():
                 if not (self._check_presence_of_labels(train_df) and self._check_presence_of_labels(test_df)):
                     raise ValueError(
                         'Not all labels are present in the train and test set; data set might be too small or there is an error in the code.')
+                if train.overlap([test]):
+                    raise ValueError('Overlap between splits detected.')
 
-                return DataSplit(train_df, self.id2label), DataSplit(test_df, self.id2label), None
+                return DataSplit(train_df, self.id2label, self.is_multilabel), DataSplit(test_df, self.id2label, self.is_multilabel), None
 
     def get_strat_k_fold_split(self, train_size: float = 0.8, n_splits: int = 5, seed: int = SEED) -> tuple[Iterable[tuple[DataSplit, DataSplit]], DataSplit]:
         """ Get stratified k-fold split of the data; i.e. n splits into train and validation set, with a test set.
@@ -435,16 +464,16 @@ class DataHandler():
     def count_label(self, label: str) -> int:
         """ Count the number of occurences of a label in the dataset."""
         if self.is_multilabel:
-            return self.df[self.LABEL_COL].apply(lambda x: x[label]==1).sum()
+            return self.df[self.LABEL_COL].apply(lambda x: x[label] == 1).sum()
         else:
             return self.df[self.LABEL_COL].apply(lambda x: x == label).sum()
-    
+
     def print_label_dist(self) -> None:
         """ Print the distribution of labels in the dataset using id2label."""
         for id, label in self.id2label.items():
             count = self.count_label(int(id))
             print(f'{label}: {count}')
-    
+
     @abstractmethod
     def read_in_data(self, data_path: str) -> pd.DataFrame:
         """ Read in the data from a given path and return a pandas DataFrame, with columns 'id', 'text' and 'labels'. 

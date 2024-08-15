@@ -65,8 +65,8 @@ def prepare_splits():
         "Substance Naivety",
         "Substances",
         "Sex of Participants",
-        "Study Conclusion",
-        "Study Type",
+        # "Study Conclusion", # Not enough data to make split
+        # "Study Type", # Not enough data to make split
     ]
     data_path = 'data/prepared_data/'
     for task in tasks:
@@ -80,7 +80,7 @@ def prepare_splits():
         try:
             print(f'Processing {task}')
             data_handler.print_label_dist()    
-            data_handler.get_strat_split()
+            data_handler.get_strat_split(use_val=True)
             data_handler.save_split(f'data/prepared_data/{task.replace(" ", "_").lower()}/')
             print('\n')
         except ValueError:

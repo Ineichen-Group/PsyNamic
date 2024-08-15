@@ -1,6 +1,6 @@
 {
     "Task": "PsyNamicMultiLabel",
-    "Date": "20240812",
+    "Date": "20240815",
     "Int_to_label": {
         "0": "Microdosing",
         "1": "Multiple Applications",
@@ -8,7 +8,8 @@
         "3": "Unknown"
     },
     "Train_size": 346,
-    "Use_val": false,
+    "Use_val": true,
     "Is_multilabel": true,
-    "Test_size": 87
+    "Test_size": 45,
+    "Val_size": 42
 }
