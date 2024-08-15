@@ -280,9 +280,12 @@ def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> 
         print('Only one class present in the predictions, classification report cannot be computed.')
 
     else:
-        report_df = classification_report_with_ci(y_true, y_predicted)
-        report_file = os.path.join(project_folder, 'classification_report.csv')
-        pd.DataFrame(report_df).to_csv(report_file)
+        try:
+            report_df = classification_report_with_ci(y_true, y_predicted)
+            report_file = os.path.join(project_folder, 'classification_report.csv')
+            pd.DataFrame(report_df).to_csv(report_file)
+        except Exception as e:
+            print('Error computing classification report:', e)
 
     return output_file
 
