@@ -1,10 +1,11 @@
 from data.prodigy_data_reader import ProdigyDataCollector
-from datahandler import PsyNamicSingleLabel, PsychNamicRelevant, PsyNamicMultiLabel
+from datahandler import PsyNamicSingleLabel, PsychNamicRelevant, PsyNamicMultiLabel, DataHandlerBIO
 import os
 import time
 import json
 import pandas as pd
 from stride_utils.prodigy import ner_process_file_and_save_to_bio_format
+
 
 def prepare_train_data(list_jsonl: list[str], annotators: list[str]) -> None:
     prodigy_data = ProdigyDataCollector(list_jsonl, annotators)
@@ -48,35 +49,51 @@ def find_file_in_dir(file_string: str, dir: str) -> str:
     return None
 
 
-def prepare_bio_data(list_jsonl: list[str], id_field: str, outfile: str):
+def prepare_bio_data(list_jsonl: list[str], id_field: str, outfile: str) -> str:
     outfiles = []
     outfile_path = os.path.dirname(outfile)
     for file in list_jsonl:
         output_name = os.path.join(
             outfile_path, f'{os.path.basename(file).replace(".jsonl", "_bio")}')
-        output_file = ner_process_file_and_save_to_bio_format(file, output_name, id_field)
+        output_file = ner_process_file_and_save_to_bio_format(
+            file, output_name, id_field)
         outfiles.append(output_file)
     # Delete outfile if it exists
     if os.path.exists(outfile):
         os.remove(outfile)
-    
+
     line_count = 0
-    
+    ids = set()
+
     # Merge all files
     with open(outfile, 'a') as out:
         for file in outfiles:
             with open(file, 'r') as f:
                 for line in f:
-                    out.write(line)
-                    line_count += 1
+                    # parse line
+                    parsed_line = json.loads(line)
+                    # check if id is unique
+                    id = parsed_line['id']
+                    if id in ids:
+                        print(
+                            f'Skipping duplicate id {parsed_line["id"]} in {file}')
+                    else:
+                        ids.add(id)
+                        out.write(line)
+                        line_count += 1
     # append line count to file name
     new_file_name = outfile.replace('.jsonl', f'_{line_count}.jsonl')
     os.rename(outfile, new_file_name)
-       
+
     # Remove temp files
     for file in outfiles:
         os.remove(file)
-        
+
+    bio_datahandler = DataHandlerBIO(new_file_name)
+    print(bio_datahandler.label2id)
+    bio_datahandler.get_split(use_val=True)
+    bio_datahandler.save_split('data/prepared_data/ner_bio/')
+
 
 def prepare_splits():
 
@@ -110,9 +127,10 @@ def prepare_splits():
             data_handler = PsyNamicSingleLabel(file, task)
         try:
             print(f'Processing {task}')
-            data_handler.print_label_dist()    
+            data_handler.print_label_dist()
             data_handler.get_strat_split(use_val=True)
-            data_handler.save_split(f'data/prepared_data/{task.replace(" ", "_").lower()}/')
+            data_handler.save_split(
+                f'data/prepared_data/{task.replace(" ", "_").lower()}/')
             print('\n')
         except ValueError:
             breakpoint()
@@ -129,10 +147,10 @@ def prepare_splits():
 # if main equal name
 if __name__ == '__main__':
     list_jsonl = [
+        'data/prodigy_exports/prodigy_export_ben_24_20240425_152801.jsonl', 
         'data/prodigy_exports/prodigy_export_ben_95_20240423_113434.jsonl',
         'data/iaa/iaa_round1_50/iaa_resolution/prodigy_export_review_all_text_50_20240418_20240607_145354.jsonl',
-        'data/prodigy_exports/prodigy_export_ben_24_20240425_152801.jsonl',
-        'data/iaa/iaa_round2_40/iaa_resolution/prodigy_export_review_all_text_40_20240523_20240705_183405.jsonl',
+        'data/iaa/iaa_round2_40/iaa_resolution/prodigy_export_review_all_text_40_20240523_20240705_183405.jsonl', 
         'data/prodigy_exports/prodigy_export_pia_250_20240423_113437_20240720_135743.jsonl'
     ]
     annotators = [
@@ -142,15 +160,17 @@ if __name__ == '__main__':
         'IAA Resolution',
         'Pia'
     ]
-    
+
+    # Fix for duplicates --> put Ben's files first
     list_json_bio = [
         'data/prodigy_exports/prodigy_export_ben_95_20240423_113434.jsonl',
+        'data/prodigy_exports/prodigy_export_ben_24_20240425_152801.jsonl', # Data appearing 3 times
         'data/iaa/iaa_round1_50/iaa_resolution/prodigy_export_review_all_token_50_20240418_20240607_145359.jsonl',
-        'data/prodigy_exports/prodigy_export_ben_24_20240425_152801.jsonl',
-        'data/iaa/iaa_round2_40/iaa_resolution/prodigy_export_review_all_token_40_20240523_20240705_183410.jsonl',
+        'data/iaa/iaa_round2_40/iaa_resolution/prodigy_export_review_all_token_40_20240523_20240705_183410.jsonl',# Data appearing 3 times
         'data/prodigy_exports/prodigy_export_pia_250_20240423_113437_20240720_135743.jsonl'
     ]
-    
+
     # prepare_train_data(list_jsonl, annotators)
     # prepare_splits()
-    prepare_bio_data(list_json_bio, 'record_id', 'data/prepared_data/ner_bio.jsonl')
+    prepare_bio_data(list_json_bio, 'record_id',
+                     'data/prepared_data/ner_bio.jsonl')

@@ -9,10 +9,11 @@ import pandas as pd
 import torch
 import csv
 import ast
-from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
+from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit, train_test_split
 from torch.utils.data import Dataset
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold, MultilabelStratifiedShuffleSplit
-from transformers import BertTokenizer
+from transformers import AutoTokenizer
+from datetime import datetime
 
 # Fix the random seed for reproducibility
 SEED = 42
@@ -21,6 +22,10 @@ torch.cuda.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
 np.random.seed(SEED)
 
+MAX_MODEL_LENGTH = {
+    'bert': 512,
+}
+
 
 class DataSplit(Dataset):
     "PyTorch Dataset class for a given data split."
@@ -28,14 +33,13 @@ class DataSplit(Dataset):
     TEXT_COL = 'text'
     LABEL_COL = 'labels'
 
-    def __init__(self, split: pd.DataFrame, id2label: dict[int, str], multilabel: bool = False, tokenizer=BertTokenizer, max_len: int = 128) -> None:
+    def __init__(self, split: pd.DataFrame, id2label: dict[int, str], tokenizer, max_len: str, multilabel: bool) -> None:
         self.df = split
         self.is_multilabel = multilabel
-        self.tokenizer = tokenizer.from_pretrained('bert-base-uncased')
         self.max_len = max_len
         self.id2label = id2label
         self.label2id = {v: k for k, v in id2label.items()}
-
+        self.tokenizer = tokenizer
         self._index = 0  # index for iteration
 
     def __len__(self) -> int:
@@ -124,6 +128,54 @@ class DataSplit(Dataset):
         return False
 
 
+class DataSplitBIO(DataSplit):
+    TOKEN_COL = 'tokens'
+    NER_COL = 'ner_tags'
+
+    def __init__(self, split: pd.DataFrame, label2id: dict, tokenizer, max_len: int) -> None:
+        self.df = split
+        self.max_len = max_len
+        self.label2id = label2id
+        self.tokenizer = tokenizer
+
+    def __getitem__(self, idx: int) -> dict:
+        tokens = self.df.iloc[idx][self.TOKEN_COL]
+        ner_tags = self.df.iloc[idx][self.NER_COL]
+
+        # Tokenize the tokens
+        encoding = self.tokenizer(
+            tokens,
+            truncation=True,
+            padding='max_length',
+            max_length=self.max_len,
+            is_split_into_words=True,
+            return_tensors='pt'
+        )
+
+        # Align labels with tokens
+        labels = [self.label2id[tag] for tag in ner_tags]
+        label_ids = [-100] * self.max_len
+
+        word_ids = encoding.word_ids(batch_index=0)
+        previous_word_idx = None
+        for i, word_idx in enumerate(word_ids):
+            if word_idx is None:
+                label_ids[i] = -100
+            elif word_idx != previous_word_idx:  # Only label the first token of each word
+                label_ids[i] = labels[word_idx]
+            previous_word_idx = word_idx
+
+        # Add the labels to the encoding
+        encoding["labels"] = torch.tensor(label_ids)
+
+        # Convert tensor dimensions from (1, max_len) to (max_len)
+        return {key: val.squeeze(0) for key, val in encoding.items()}
+
+    @property
+    def labels(self) -> list[str]:
+        return list(self.label2id.keys())
+
+
 class DataHandler():
     """ Abstract DataHandler class to handle data loading, preprocessing and splitting.
         Idea: Inherit from this class and implement the abstract methods to create a DataHandler for a specific dataset.
@@ -133,9 +185,10 @@ class DataHandler():
     LABEL_COL = 'labels'
     ANNOTATOR_COL = 'annotator'
 
-    def __init__(self, data_path: str = None, meta_file: str = None, int_to_label: str = None) -> None:
+    def __init__(self, model: str = 'allenai/scibert_scivocab_uncased', data_path: str = None, meta_file: str = None, int_to_label: str = None, ) -> None:
+        self.model = model
         self.nr_classes = False
-
+        self.tokenizer = AutoTokenizer.from_pretrained(model)
         # Provide either meta_file or int_to_label
         if not meta_file and not int_to_label:
             raise ValueError(
@@ -172,8 +225,34 @@ class DataHandler():
         self.n_splits = 5
         self.use_val = False
 
+        self.max_length = self._detect_length()
+
     def __len__(self) -> int:
         return len(self.df)
+
+    def _detect_length(self) -> int:
+        """
+        Detect a suitable max_length based on token lengths in the dataset.
+
+        Args:
+            percentile (float): Percentile to determine max_length.
+
+        Returns:
+            int: Suggested max_length for tokenization.
+        """
+        percentile = 95
+        # Tokenize all texts in the dataset and measure their lengths
+        lengths = []
+        for text in self.df[self.TEXT_COL]:
+            encoded = self.tokenizer.encode(text, add_special_tokens=True)
+            lengths.append(len(encoded))
+
+        if 'bert' in self.model:
+            max_model_length = MAX_MODEL_LENGTH['bert']
+            max_length = int(np.percentile(lengths, percentile))
+            if max_length > max_model_length:
+                max_length = max_model_length
+        return max_length
 
     def _determine_nr_classes(self) -> int:
         """ 
@@ -189,6 +268,8 @@ class DataHandler():
 
     def _check_presence_of_labels(self, datasplit: pd.DataFrame) -> bool:
         """ Check if all labels are present in a given datasplit; used for sanity checkking during splitting."""
+        if datasplit is None:
+            return True
         return self.nr_classes == len(datasplit[self.LABEL_COL].unique())
 
     def get_strat_split(self, train_size: float = 0.8, use_val: bool = False, seed: int = SEED) -> tuple[DataSplit, DataSplit, Union[DataSplit, None]]:
@@ -212,9 +293,12 @@ class DataHandler():
                 return False
         if reuse():
             # check if there is overlap between the splits
-            train = DataSplit(self.train, self.id2label, self.is_multilabel)
-            test = DataSplit(self.test, self.id2label, self.is_multilabel)
-            val = DataSplit(self.val, self.id2label, self.is_multilabel)
+            train = DataSplit(self.train, self.id2label,
+                              self.tokenizer, self.max_length, self.is_multilabel)
+            test = DataSplit(self.test, self.id2label,
+                             self.tokenizer, self.max_length, self.is_multilabel)
+            val = DataSplit(self.val, self.id2label, self.tokenizer,
+                            self.max_length, self.is_multilabel)
             if use_val:
                 if train.overlap([test, val]):
                     raise ValueError('Overlap between splits detected.')
@@ -252,8 +336,6 @@ class DataHandler():
                 self.train = train_df
                 self.val = val_df
                 self.test = test_df
-                return DataSplit(train_df, self.id2label), DataSplit(test_df, self.id2label), DataSplit(val_df, self.id2label)
-
             else:
                 msss = MultilabelStratifiedShuffleSplit(
                     n_splits=1, test_size=1-train_size, random_state=SEED)
@@ -263,8 +345,7 @@ class DataHandler():
                 # Save splits to avoid recomputation
                 self.train = train_df
                 self.test = test_df
-
-                return DataSplit(train_df, self.id2label), DataSplit(test_df, self.id2label), None
+                self.val = None
         else:
             if use_val:
                 # First split: train (e.g. 60%) and remaining (e.g. 40%)
@@ -282,19 +363,9 @@ class DataHandler():
                     remaining_df, remaining_df[self.LABEL_COL]))
                 val_df = remaining_df.iloc[val_idx]
                 test_df = remaining_df.iloc[val_idx]
-                if not (self._check_presence_of_labels(train_df) and self._check_presence_of_labels(val_df) and self._check_presence_of_labels(test_df)):
-                    raise ValueError(
-                        'Not all labels are present in the train, val and test set; data set might be too small or there is an error in the code.')
                 self.train = train_df
                 self.val = val_df
                 self.test = test_df
-
-                train = DataSplit(train_df, self.id2label, self.is_multilabel)
-                test = DataSplit(test_df, self.id2label, self.is_multilabel)
-                val = DataSplit(val_df, self.id2label, self.is_multilabel)
-                if train.overlap([test, val]):
-                    raise ValueError('Overlap between splits detected.')
-                return train, test, val
             else:
                 # Direct split: train (e.g. 80%) and test (e.g. 20%)
                 split = StratifiedShuffleSplit(
@@ -306,16 +377,32 @@ class DataHandler():
                 self.train = train_df
                 self.test = test_df
 
-                if not (self._check_presence_of_labels(train_df) and self._check_presence_of_labels(test_df)):
+                if not self._check_presence_of_labels(test_df):
                     raise ValueError(
-                        'Not all labels are present in the train and test set; data set might be too small or there is an error in the code.')
-                if train.overlap([test]):
-                    raise ValueError('Overlap between splits detected.')
+                        'Not all labels are present in the test set; data set might be too small or there is an error in the code.')
 
-                return DataSplit(train_df, self.id2label, self.is_multilabel), DataSplit(test_df, self.id2label, self.is_multilabel), None
+            if not (self._check_presence_of_labels(train_df) and self._check_presence_of_labels(test_df)):
+                raise ValueError(
+                    'Not all labels are present in the train and test set; data set might be too small or there is an error in the code.')
+
+        train = DataSplit(train_df, self.id2label, self.tokenizer,
+                          self.max_length, self.is_multilabel)
+        test = DataSplit(test_df, self.id2label, self.tokenizer,
+                         self.max_length, self.is_multilabel)
+
+        if use_val:
+            val = DataSplit(val_df, self.id2label, self.tokenizer,
+                            self.max_length, self.is_multilabel)
+            if train.overlap([test, val]):
+                raise ValueError('Overlap between splits detected.')
+            return train, test, val
+        else:
+            if train.overlap([test]):
+                raise ValueError('Overlap between splits detected.')
+            return train, test, None
 
     def get_strat_k_fold_split(self, train_size: float = 0.8, n_splits: int = 5, seed: int = SEED) -> tuple[Iterable[tuple[DataSplit, DataSplit]], DataSplit]:
-        """ Get stratified k-fold split of the data; i.e. n splits into train and validation set, with a test set.
+        """Get stratified k-fold split of the data; i.e., n splits into train and validation set, with a test set.
 
         Args:
             train_size (float, optional): Size of the training set. Defaults to 0.8.
@@ -325,41 +412,41 @@ class DataHandler():
         Returns:
             tuple[Iterable[tuple[DataSplit, DataSplit]], DataSplit]: Iterable of k-folds and test split.
         """
-        self.train_size = train_size
-        self.n_splits = n_splits
-
+        # Obtain the stratified split for training and testing
         train_split, test_split, _ = self.get_strat_split(
             train_size=train_size)
 
+        # Prepare data for k-fold splitting
+        X = train_split.df[self.TEXT_COL].values
+        y = np.array(train_split.df[self.LABEL_COL].tolist())
+
+        # Initialize k-fold stratifiers
         if self.is_multilabel:
-            mskf = MultilabelStratifiedKFold(
-                n_splits=n_splits, shuffle=True, random_state=SEED)
-            folds = []
-            X = train_split.df[self.TEXT_COL].values
-            y = np.array(train_split.df[self.LABEL_COL].tolist())
-
-            for train_idx, val_idx in mskf.split(X, y):
-                train_df = train_split.df.iloc[train_idx]
-                val_df = train_split.df.iloc[val_idx]
-                folds.append(
-                    (DataSplit(train_df, self.id2label), DataSplit(val_df, self.id2label)))
-
-            self.folds = folds
-            return folds, test_split
-
+            kfold = MultilabelStratifiedKFold(
+                n_splits=n_splits, shuffle=True, random_state=seed)
         else:
-            skf = StratifiedKFold(
-                n_splits=n_splits, shuffle=True, random_state=SEED)
-            folds = []
-            for train_idx, val_idx in skf.split(train_split.df, train_split.df[self.LABEL_COL]):
-                train_df = train_split.df.iloc[train_idx]
-                val_df = train_split.df.iloc[val_idx]
+            kfold = StratifiedKFold(
+                n_splits=n_splits, shuffle=True, random_state=seed)
 
-                folds.append(
-                    (DataSplit(train_df, self.id2label), DataSplit(val_df, self.id2label)))
+        # Create fold indices
+        fold_indices = list(kfold.split(X, y))
 
-            self.folds = folds
-            return folds, test_split
+        # Create DataSplit instances for each fold
+        folds = []
+        for train_idx, val_idx in fold_indices:
+            train_df = train_split.df.iloc[train_idx]
+            val_df = train_split.df.iloc[val_idx]
+
+            # Create DataSplit instances for this fold
+            train_data_split = DataSplit(
+                train_df, self.id2label, self.tokenizer, self.max_length, self.is_multilabel)
+            val_data_split = DataSplit(
+                val_df, self.id2label, self.tokenizer, self.max_length, self.is_multilabel)
+
+            folds.append((train_data_split, val_data_split))
+
+        self.folds = folds
+        return folds, test_split
 
     def save_split(self, save_path: str) -> None:
         """ Save the train, test and validation splits to a given path as csv files.
@@ -503,6 +590,200 @@ class DataHandler():
             return label_list
 
 
+class DataHandlerBIO():
+    TOKEN_COL = 'tokens'
+    NER_COL = 'ner_tags'
+    ID_COL = 'id'
+
+    def __init__(self, data_path: str, model: str = 'allenai/scibert_scivocab_uncased') -> None:
+        self.model = model
+        self.df = pd.read_json(data_path, lines=True)
+        self.label2id = self._detect_labels()
+        self.tokenizer = AutoTokenizer.from_pretrained(model)
+        self.max_length = self._detect_length()
+
+        self.train = None
+        self.test = None
+        self.val = None
+
+        self.use_val = None
+        self.train_size = None
+
+    def _detect_labels(self) -> dict:
+        """Detect the labels in the dataset and return a dictionary mapping the labels to integers."""
+        labels = set()
+        for tags in self.df[self.NER_COL]:
+            labels.update(tags)
+        return {label: i for i, label in enumerate(labels)}
+
+    def _detect_length(self) -> int:
+        """
+        Determine a suitable max_length for tokenized inputs based on the token lengths in the dataframe using a tokenizer.
+        """
+        percentile = 95
+
+        def tokenize_text(tokens):
+            text = " ".join(tokens)  # Reconstruct the text from tokens
+            encoded = self.tokenizer.encode(
+                text, add_special_tokens=False)  # Tokenize text
+            return len(encoded)
+        tokenized_texts = self.df[self.TOKEN_COL].tolist()
+        token_lengths = [tokenize_text(tokens) for tokens in tokenized_texts]
+        max_length = int(np.percentile(token_lengths, percentile))
+        if 'bert' in self.model:
+            max_model_length = MAX_MODEL_LENGTH['bert']
+            if max_length > max_model_length:
+                max_length = max_model_length
+
+        return max_length
+
+    def get_split(self, train_size: float = 0.8, use_val: bool = False, seed: int = 42) -> tuple:
+        """Get stratified split of the data, with an optional validation set.
+
+        Args:
+            train_size (float, optional): Size of the training set. Defaults to 0.8.
+            use_val (bool, optional): Whether to use a validation set. Defaults to False.
+            seed (int, optional): Random seed. Defaults to 42.
+
+        Returns:
+            tuple: Train, test, and validation set. Validation set is None if use_val is False.
+        """
+        # If splits have not been created yet, create them
+        if not self.train:
+            np.random.seed(seed)
+
+            shuffled_df = self.df.sample(
+                frac=1, random_state=seed).reset_index(drop=True)
+
+            # Calculate the split sizes
+            n_total = len(shuffled_df)
+            if use_val:
+                n_train = int(train_size * n_total)
+                n_rest = n_total - n_train
+                n_val = int(n_rest * 0.5)
+                train_df = shuffled_df.iloc[:n_train]
+                val_df = shuffled_df.iloc[n_train:n_train + n_val]
+                test_df = shuffled_df.iloc[n_train + n_val:]
+            else:
+                n_train = int(train_size * n_total)
+                train_df = shuffled_df.iloc[:n_train]
+                test_df = shuffled_df.iloc[n_train:]
+                val_df = None
+
+            self.train = train_df
+            self.test = test_df
+            self.val = val_df
+            self.use_val = use_val
+            self.train_size = train_size
+
+        # Check for overlaps
+        if self.check_overlap():
+            raise ValueError('Overlap between splits detected.')
+        train = DataSplitBIO(train_df, self.label2id,
+                             self.tokenizer, self.max_length)
+        test = DataSplitBIO(test_df, self.label2id,
+                            self.tokenizer, self.max_length)
+        if use_val:
+            return train, test, DataSplitBIO(val_df, self.label2id, self.tokenizer, self.max_length)
+        else:
+            return train, test, None
+
+    def save_split(self, directory: str = "data_splits") -> None:
+        """Save the train, test, and optionally validation splits to CSV files along with a meta file."""
+        # Create the directory if it doesn't exist
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        if self.train is None or self.test is None:
+            raise ValueError(
+                "No splits have been created yet, use get_split() first."
+            )
+
+        # Define file paths
+        train_path = os.path.join(directory, "train.csv")
+        test_path = os.path.join(directory, "test.csv")
+        val_path = os.path.join(directory, "val.csv")
+
+        self.train.to_csv(train_path, index=False)
+        self.test.to_csv(test_path, index=False)
+
+        if self.val is not None:
+            self.val.to_csv(val_path, index=False)
+
+        # Save metadata
+        meta = {
+            "Task": "NER",
+            "Date": datetime.now().strftime("%Y%m%d"),
+            "Int_to_label": {v: k for k, v in self.label2id.items()},
+            "Train_size": len(self.train),
+            "Use_val": self.val is not None,
+            "Test_size": len(self.test)
+        }
+
+        meta_path = os.path.join(directory, "meta.json")
+        with open(meta_path, "w") as f:
+            json.dump(meta, f, indent=4)
+
+        print(f"Splits and metadata saved in directory '{directory}'.")
+
+    def load_split(self, directory: str) -> None:
+        """Load the train, test, and optionally validation splits from a directory and load the meta file."""
+        # Load metadata
+        with open(os.path.join(directory, "meta.json"), "r") as f:
+            meta = json.load(f)
+
+        self.int2label = meta["Int_to_label"]
+        self.use_val = meta["Use_val"]
+        self.train_size = meta["Train_size"]
+
+        # Load splits
+        self.train = pd.read_csv(os.path.join(directory, "train_split.csv"))
+        self.test = self.pd.read_csv(os.path.join(directory, "test_split.csv"))
+        val_df = None
+        if meta["Use_val"]:
+            self.val = pd.read_csv(os.path.join(directory, "val_split.csv"))
+
+    def check_overlap(self):
+        """Check and print overlapping IDs between the train, test, and validation splits."""
+        if self.train is None or self.test is None:
+            raise ValueError("No splits have been created yet.")
+
+        # Ensure 'id' column exists in the DataFrames
+        if 'id' not in self.train.columns or 'id' not in self.test.columns:
+            raise ValueError(
+                "'id' column is required in train, test, and validation DataFrames.")
+
+        # Initialize overlap report
+        overlap_report = {
+            "Train-Test": None,
+            "Train-Val": None,
+            "Test-Val": None
+        }
+
+        # Check for overlap between train and test
+        overlap_train_test = self.train.merge(self.test, on='id', how='inner')
+        if not overlap_train_test.empty:
+            overlap_report["Train-Test"] = overlap_train_test['id'].tolist()
+            print(
+                f"Overlap between Train and Test splits: {overlap_report['Train-Test']}")
+
+        if self.val is not None:
+            # Check for overlap between train and validation
+            overlap_train_val = self.train.merge(
+                self.val, on='id', how='inner')
+            if not overlap_train_val.empty:
+                overlap_report["Train-Val"] = overlap_train_val['id'].tolist()
+                print(
+                    f"Overlap between Train and Validation splits: {overlap_report['Train-Val']}")
+
+            # Check for overlap between test and validation
+            overlap_test_val = self.test.merge(self.val, on='id', how='inner')
+            if not overlap_test_val.empty:
+                overlap_report["Test-Val"] = overlap_test_val['id'].tolist()
+                print(
+                    f"Overlap between Test and Validation splits: {overlap_report['Test-Val']}")
+
+
 class PsyNamicSingleLabel(DataHandler):
 
     def __init__(self, data_path: str, relevant_class: str, meta_file: Optional[str] = None) -> None:
@@ -517,7 +798,7 @@ class PsyNamicSingleLabel(DataHandler):
                     meta_file = path.join(path.dirname(data_path), file)
                     break
 
-        super().__init__(data_path, meta_file=meta_file)
+        super().__init__(data_path=data_path, meta_file=meta_file)
 
     def read_in_data(self, data_path: str) -> pd.DataFrame:
         df = pd.read_csv(data_path)
@@ -531,7 +812,7 @@ class PsyNamicMultiLabel(DataHandler):
     def __init__(self, data_path: str, meta_file: Optional[str] = None) -> None:
         filename = path.basename(data_path)
         meta_file = data_path.replace('.csv', '_meta.json')
-        super().__init__(data_path, meta_file=meta_file)
+        super().__init__(data_path=data_path, meta_file=meta_file)
 
     def read_in_data(self, data_path: str) -> pd.DataFrame:
         df = pd.read_csv(data_path)
@@ -547,13 +828,6 @@ class PsyNamicMultiLabel(DataHandler):
         return df
 
 
-class PsychNamicBIOHandler(DataHandler):
-    pass
-
-    def read_in_data(self, data_path: str) -> pd.DataFrame:
-        pass
-
-
 class PsychNamicRelevant(DataHandler):
     def __init__(self, data_path: str, id_col: str, title_col: str, abst_col: str, rel_col: str) -> None:
         self.id_col = id_col
@@ -561,7 +835,7 @@ class PsychNamicRelevant(DataHandler):
         self.abst_col = abst_col
         self.rel_col = rel_col
         self.id2label = {0: 'excluded', 1: 'included'}
-        super().__init__(data_path, int_to_label=self.id2label)
+        super().__init__(data_path=data_path, int_to_label=self.id2label)
 
     def read_in_data(self, data_path: str) -> pd.DataFrame:
         df = pd.read_csv(data_path)
