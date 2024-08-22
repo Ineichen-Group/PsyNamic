@@ -26,7 +26,17 @@ MAX_MODEL_LENGTH = {
     'bert': 512,
 }
 
+# To avoid circular import has to live here
+MODEL_IDENTIFIER = {
+    'pubmedbert': 'microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract',
+    'biomedbert-abstract': 'microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract',
+    'scibert': 'allenai/scibert_scivocab_uncased',
+    'biobert': 'dmis-lab/biobert-v1.1',
+    'clinicalbert': 'emilyalsentzer/Bio_ClinicalBERT',
+    'biolinkbert': 'michiyasunaga/BioLinkBERT-base',
+}
 
+# TODO: Fix use_val vs. self.val vs. parameter use_val mess
 class DataSplit(Dataset):
     "PyTorch Dataset class for a given data split."
     ID_COL = 'id'
@@ -129,6 +139,9 @@ class DataSplit(Dataset):
 
 
 class DataSplitBIO(DataSplit):
+    """ PyTorch Dataset class for a given data split for NER tasks.
+
+    """
     TOKEN_COL = 'tokens'
     NER_COL = 'ner_tags'
 
@@ -137,6 +150,13 @@ class DataSplitBIO(DataSplit):
         self.max_len = max_len
         self.label2id = label2id
         self.tokenizer = tokenizer
+        
+        # Convert string representations of lists to lists
+        self.df[self.TOKEN_COL] = self.df[self.TOKEN_COL].apply(ast.literal_eval)
+        self.df[self.NER_COL] = self.df[self.NER_COL].apply(ast.literal_eval)
+        
+        # Make sure the ids of label2id are integers
+        self.label2id = {k: int(v) for k, v in self.label2id.items()}
 
     def __getitem__(self, idx: int) -> dict:
         tokens = self.df.iloc[idx][self.TOKEN_COL]
@@ -151,17 +171,21 @@ class DataSplitBIO(DataSplit):
             is_split_into_words=True,
             return_tensors='pt'
         )
+        # print tokens created by tokenizer
+        bert_tokens = self.tokenizer.convert_ids_to_tokens(
+            encoding['input_ids'].squeeze(0))
 
-        # Align labels with tokens
+        # Align labels with BERT tokens
         labels = [self.label2id[tag] for tag in ner_tags]
         label_ids = [-100] * self.max_len
-
+        
+        # Each token is assigned an id: if token is split into multiple subtokens, all subtokens get the same id
         word_ids = encoding.word_ids(batch_index=0)
         previous_word_idx = None
         for i, word_idx in enumerate(word_ids):
             if word_idx is None:
-                label_ids[i] = -100
-            elif word_idx != previous_word_idx:  # Only label the first token of each word
+                label_ids[i] = -100  # -100 as a dummy label for padding tokens or ignored subtokens
+            elif word_idx != previous_word_idx:  # Label only the first subtoken to avoid redundant labels for word pieces
                 label_ids[i] = labels[word_idx]
             previous_word_idx = word_idx
 
@@ -185,10 +209,10 @@ class DataHandler():
     LABEL_COL = 'labels'
     ANNOTATOR_COL = 'annotator'
 
-    def __init__(self, model: str = 'allenai/scibert_scivocab_uncased', data_path: str = None, meta_file: str = None, int_to_label: str = None, ) -> None:
-        self.model = model
+    def __init__(self, model: str = 'scibert', data_path: str = None, meta_file: str = None, int_to_label: str = None, ) -> None:
+        self.model = MODEL_IDENTIFIER[model]
         self.nr_classes = False
-        self.tokenizer = AutoTokenizer.from_pretrained(model)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model)
         # Provide either meta_file or int_to_label
         if not meta_file and not int_to_label:
             raise ValueError(
@@ -214,6 +238,8 @@ class DataHandler():
             self.df = self.read_in_data(data_path)
             if not self.nr_classes:
                 self.nr_classes = self._determine_nr_classes()
+            
+            self.max_len = self._detect_length()
 
         self.train = None
         self.test = None
@@ -225,7 +251,7 @@ class DataHandler():
         self.n_splits = 5
         self.use_val = False
 
-        self.max_length = self._detect_length()
+       
 
     def __len__(self) -> int:
         return len(self.df)
@@ -294,11 +320,11 @@ class DataHandler():
         if reuse():
             # check if there is overlap between the splits
             train = DataSplit(self.train, self.id2label,
-                              self.tokenizer, self.max_length, self.is_multilabel)
+                              self.tokenizer, self.max_len, self.is_multilabel)
             test = DataSplit(self.test, self.id2label,
-                             self.tokenizer, self.max_length, self.is_multilabel)
+                             self.tokenizer, self.max_len, self.is_multilabel)
             val = DataSplit(self.val, self.id2label, self.tokenizer,
-                            self.max_length, self.is_multilabel)
+                            self.max_len, self.is_multilabel)
             if use_val:
                 if train.overlap([test, val]):
                     raise ValueError('Overlap between splits detected.')
@@ -386,13 +412,13 @@ class DataHandler():
                     'Not all labels are present in the train and test set; data set might be too small or there is an error in the code.')
 
         train = DataSplit(train_df, self.id2label, self.tokenizer,
-                          self.max_length, self.is_multilabel)
+                          self.max_len, self.is_multilabel)
         test = DataSplit(test_df, self.id2label, self.tokenizer,
-                         self.max_length, self.is_multilabel)
+                         self.max_len, self.is_multilabel)
 
         if use_val:
             val = DataSplit(val_df, self.id2label, self.tokenizer,
-                            self.max_length, self.is_multilabel)
+                            self.max_len, self.is_multilabel)
             if train.overlap([test, val]):
                 raise ValueError('Overlap between splits detected.')
             return train, test, val
@@ -439,9 +465,9 @@ class DataHandler():
 
             # Create DataSplit instances for this fold
             train_data_split = DataSplit(
-                train_df, self.id2label, self.tokenizer, self.max_length, self.is_multilabel)
+                train_df, self.id2label, self.tokenizer, self.max_len, self.is_multilabel)
             val_data_split = DataSplit(
-                val_df, self.id2label, self.tokenizer, self.max_length, self.is_multilabel)
+                val_df, self.id2label, self.tokenizer, self.max_len, self.is_multilabel)
 
             folds.append((train_data_split, val_data_split))
 
@@ -595,17 +621,20 @@ class DataHandlerBIO():
     NER_COL = 'ner_tags'
     ID_COL = 'id'
 
-    def __init__(self, data_path: str, model: str = 'allenai/scibert_scivocab_uncased') -> None:
-        self.model = model
-        self.df = pd.read_json(data_path, lines=True)
-        self.label2id = self._detect_labels()
-        self.tokenizer = AutoTokenizer.from_pretrained(model)
-        self.max_length = self._detect_length()
+    def __init__(self, data_path: str, model: str = 'scibert') -> None:
+        self.model = MODEL_IDENTIFIER[model]
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model)
+
+        # if data_path is a file: read in the data
+        if path.isfile(data_path):
+            self.df = pd.read_json(data_path, lines=True)
+            self.label2id = self._detect_labels()
+            self.id2label = {v: k for k, v in self.label2id.items()}
+            self.max_len = self._detect_length()
 
         self.train = None
         self.test = None
         self.val = None
-
         self.use_val = None
         self.train_size = None
 
@@ -614,11 +643,12 @@ class DataHandlerBIO():
         labels = set()
         for tags in self.df[self.NER_COL]:
             labels.update(tags)
+        labels = sorted(list(labels), reverse=True)
         return {label: i for i, label in enumerate(labels)}
 
     def _detect_length(self) -> int:
         """
-        Determine a suitable max_length for tokenized inputs based on the token lengths in the dataframe using a tokenizer.
+        Determine a suitable max_len for tokenized inputs based on the token lengths in the dataframe using a tokenizer.
         """
         percentile = 95
 
@@ -630,7 +660,7 @@ class DataHandlerBIO():
         tokenized_texts = self.df[self.TOKEN_COL].tolist()
         token_lengths = [tokenize_text(tokens) for tokens in tokenized_texts]
         max_length = int(np.percentile(token_lengths, percentile))
-        if 'bert' in self.model:
+        if 'bert' in self.model.lower():
             max_model_length = MAX_MODEL_LENGTH['bert']
             if max_length > max_model_length:
                 max_length = max_model_length
@@ -648,8 +678,11 @@ class DataHandlerBIO():
         Returns:
             tuple: Train, test, and validation set. Validation set is None if use_val is False.
         """
+        
+        if self.use_val is None:
+            self.use_val = use_val       
         # If splits have not been created yet, create them
-        if not self.train:
+        if self.train is None:
             np.random.seed(seed)
 
             shuffled_df = self.df.sample(
@@ -675,16 +708,17 @@ class DataHandlerBIO():
             self.val = val_df
             self.use_val = use_val
             self.train_size = train_size
+            self.max_len = self._detect_length()
 
         # Check for overlaps
         if self.check_overlap():
             raise ValueError('Overlap between splits detected.')
-        train = DataSplitBIO(train_df, self.label2id,
-                             self.tokenizer, self.max_length)
-        test = DataSplitBIO(test_df, self.label2id,
-                            self.tokenizer, self.max_length)
-        if use_val:
-            return train, test, DataSplitBIO(val_df, self.label2id, self.tokenizer, self.max_length)
+        train = DataSplitBIO(self.train, self.label2id,
+                             self.tokenizer, self.max_len)
+        test = DataSplitBIO(self.test, self.label2id,
+                            self.tokenizer, self.max_len)
+        if self.use_val:
+            return train, test, DataSplitBIO(self.val, self.label2id, self.tokenizer, self.max_len)
         else:
             return train, test, None
 
@@ -717,7 +751,8 @@ class DataHandlerBIO():
             "Int_to_label": {v: k for k, v in self.label2id.items()},
             "Train_size": len(self.train),
             "Use_val": self.val is not None,
-            "Test_size": len(self.test)
+            "Test_size": len(self.test),
+            "Is_multilabel": False,
         }
 
         meta_path = os.path.join(directory, "meta.json")
@@ -726,22 +761,26 @@ class DataHandlerBIO():
 
         print(f"Splits and metadata saved in directory '{directory}'.")
 
-    def load_split(self, directory: str) -> None:
+    def load_splits(self, directory: str) -> None:
         """Load the train, test, and optionally validation splits from a directory and load the meta file."""
         # Load metadata
         with open(os.path.join(directory, "meta.json"), "r") as f:
             meta = json.load(f)
 
         self.int2label = meta["Int_to_label"]
+        self.label2id = {v: k for k, v in self.int2label.items()}
         self.use_val = meta["Use_val"]
         self.train_size = meta["Train_size"]
 
         # Load splits
-        self.train = pd.read_csv(os.path.join(directory, "train_split.csv"))
-        self.test = self.pd.read_csv(os.path.join(directory, "test_split.csv"))
-        val_df = None
-        if meta["Use_val"]:
-            self.val = pd.read_csv(os.path.join(directory, "val_split.csv"))
+        self.train = pd.read_csv(os.path.join(directory, "train.csv"))
+        self.test = pd.read_csv(os.path.join(directory, "test.csv"))
+        self.val = None
+        if self.use_val:
+            self.val = pd.read_csv(os.path.join(directory, "val.csv"))
+
+        self.df = pd.concat([self.train, self.test, self.val])
+        self.max_len = self._detect_length()
 
     def check_overlap(self):
         """Check and print overlapping IDs between the train, test, and validation splits."""

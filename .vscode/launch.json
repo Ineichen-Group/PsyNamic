@@ -25,6 +25,20 @@
                 "--task", "Mini Relevant Sample",
                 "--epoch", "30"
             ]
+        },
+        {
+            "name": "NER Finetune with args",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/model/model.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--model", "pubmedbert",
+                "--data", "data/prepared_data/ner_bio",
+                "--task", "NER",
+                "--epoch", "10"
+            ]
         }
     ]
 }
