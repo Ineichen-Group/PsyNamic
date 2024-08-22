@@ -34,8 +34,8 @@ DATA_PATH = './data/prepared_data'
 
 
 os.environ['WANDB_PROJECT'] = "psynamic"
+
 # TODO: Enable cross validation
-# TODO: enable all hyperparameters
 # TODO: Hyperparameter tune
 
 
@@ -85,8 +85,6 @@ def init_argparse():
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--early_stopping_patience', type=int, default=3)
     parser.add_argument('--gradient_clipping', type=float, default=0.1)
-    parser.add_argument(
-        '--metrics', type=list[str], default=['accuracy', 'precision', 'recall', 'f1'])
     parser.add_argument('--device', type=str,
                         choices=['cpu', 'cuda'], default='cuda')
 
@@ -96,10 +94,13 @@ def init_argparse():
     return parser.parse_args()
 
 
-def save_train_args(project_dir: str, args: argparse.Namespace) -> None:
+def save_train_args(project_dir: str, args: argparse.Namespace, add_params: dict = None) -> None:
     # Write the training arguments to a json
+    args = vars(args)
+    if add_params is not None:
+        args.update(add_params)
     with open(os.path.join(project_dir, 'params.json'), 'w') as f:
-        json.dump(vars(args), f)
+        json.dump(args, f)
 
 
 def init_directories(model: str, task: str) -> str:
@@ -122,7 +123,7 @@ def load_data(data: str, meta_file: str, model: str) -> tuple[DataSplit, DataSpl
         train_dataset, test_dataset, eval_dataset = datahandler.get_split()
 
     else:
-        datahandler = DataHandler(data, model=model, meta_file=meta_file)
+        datahandler = DataHandler(data_path=data, model=model, meta_file=meta_file)
         # TODO: clean up usage of use_val
         use_val = datahandler.load_splits(data)
         train_dataset, test_dataset, eval_dataset = datahandler.get_strat_split(
@@ -135,13 +136,13 @@ def train(
     project_dir: str,
     train_dataset: Union[DataSplit, DataSplitBIO],
     args: argparse.Namespace,
-    val_dataset: Union[DataSplit, DataSplitBIO]=None,  # Optional parameter for validation dataset
-    resume_from_checkpoint: bool=False,
-    is_multilable: bool=False,
+    val_dataset: Union[DataSplit, DataSplitBIO] = None,
+    resume_from_checkpoint: bool = False,
+    is_multilabel: bool = False,
     task: str = '',
 ) -> Trainer:
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
-    problem_type = "single_label_classification" if not is_multilable else "multi_label_classification"
+    problem_type = "single_label_classification" if not is_multilabel else "multi_label_classification"
 
     if resume_from_checkpoint:
         tokenizer = AutoTokenizer.from_pretrained(args.load)
@@ -150,8 +151,7 @@ def train(
                 args.load).to(device)
         else:
             model = AutoModelForSequenceClassification.from_pretrained(
-                args.load,
-                problem_type=problem_type).to(device)
+                args.load, problem_type=problem_type).to(device)
     else:
         model_id = MODEL_IDENTIFIER[args.model]
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -160,16 +160,13 @@ def train(
                 model_id, num_labels=train_dataset.nr_labels).to(device)
         else:
             model = BertForSequenceClassification.from_pretrained(
-                model_id, num_labels=train_dataset.nr_labels,
-                problem_type=problem_type).to(device)
-
+                model_id, num_labels=train_dataset.nr_labels, problem_type=problem_type).to(device)
 
     training_args = TrainingArguments(
         output_dir=project_dir,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
-        # Conditionally set evaluation strategy
         eval_strategy="epoch" if val_dataset is not None else "no",
         save_strategy="epoch",
         load_best_model_at_end=True,
@@ -186,7 +183,7 @@ def train(
                       weight_decay=args.weight_decay)
     scheduler = get_linear_schedule_with_warmup(
         optimizer,
-        num_warmup_steps=int(training_args.warmup_ratio * total_steps),
+        num_warmup_steps=int(args.warmup_ratio * total_steps),
         num_training_steps=total_steps
     )
 
@@ -208,42 +205,28 @@ def train(
 
     def multi_label_metrics(pred):
         threshold = 0.5
-        # Apply sigmoid to predictions
         sigmoid = torch.nn.Sigmoid()
         probs = sigmoid(torch.Tensor(pred.predictions))
         labels = pred.label_ids
-        # Apply threshold to convert probabilities to binary predictions
         y_pred = np.zeros(probs.shape)
         y_pred[np.where(probs >= threshold)] = 1
 
-        # Calculate metrics
-        y_true = labels
-        f1_micro_average = f1_score(
-            y_true=y_true, y_pred=y_pred, average='micro')
-        roc_auc = roc_auc_score(y_true, y_pred, average='micro')
-        accuracy = accuracy_score(y_true, y_pred)
-        precision = precision_score(y_true, y_pred, average='micro')
-        recall = recall_score(y_true, y_pred, average='micro')
-
-        # Return metrics as a dictionary
         metrics = {
-            'f1': f1_micro_average,
-            'roc_auc': roc_auc,
-            'accuracy': accuracy,
-            'precision': precision,
-            'recall': recall
+            'f1': f1_score(y_true=labels, y_pred=y_pred, average='micro'),
+            'roc_auc': roc_auc_score(labels, y_pred, average='micro'),
+            'accuracy': accuracy_score(labels, y_pred),
+            'precision': precision_score(labels, y_pred, average='micro'),
+            'recall': recall_score(labels, y_pred, average='micro')
         }
 
         return metrics
 
     def compute_bio_metrics(p, label_list):
-        # Load the seqeval metric using the Hugging Face Evaluate library
         metric = load("seqeval")
 
         predictions, labels = p
         predictions = np.argmax(predictions, axis=2)
 
-        # Remove ignored index (special tokens)
         true_predictions = [
             [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
             for prediction, label in zip(predictions, labels)
@@ -252,26 +235,21 @@ def train(
             [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
             for prediction, label in zip(predictions, labels)
         ]
-        
-        # Compute the metrics
-        results = metric.compute(predictions=true_predictions, references=true_labels)
 
-        # Initialize the final result dictionary
+        results = metric.compute(
+            predictions=true_predictions, references=true_labels)
         final_results = {}
 
-        # Add overall metrics
         final_results["overall_precision"] = results["overall_precision"]
         final_results["overall_recall"] = results["overall_recall"]
         final_results["overall_f1"] = results["overall_f1"]
         final_results["overall_accuracy"] = results["overall_accuracy"]
 
-        # Add entity-level metrics (flattening nested dictionaries)
         for key, value in results.items():
             if isinstance(value, dict):
                 for n, v in value.items():
                     final_results[f"{key}_{n}"] = v
 
-        # Calculate and add macro metrics
         Ps, Rs, Fs = [], [], []
         for type_name in results:
             if type_name.startswith("overall"):
@@ -279,7 +257,7 @@ def train(
             Ps.append(results[type_name]["precision"])
             Rs.append(results[type_name]["recall"])
             Fs.append(results[type_name]["f1"])
-        
+
         final_results["macro_precision"] = np.mean(Ps)
         final_results["macro_recall"] = np.mean(Rs)
         final_results["macro_f1"] = np.mean(Fs)
@@ -288,11 +266,10 @@ def train(
 
     if args.task == 'NER':
         label_list = train_dataset.labels
-        def metrics(p): return compute_bio_metrics((p.predictions, p.label_ids), label_list)
-
-    elif is_multilable:
+        def metrics(p): return compute_bio_metrics(
+            (p.predictions, p.label_ids), label_list)
+    elif is_multilabel:
         metrics = multi_label_metrics
-
     else:
         metrics = compute_metrics
 
@@ -301,8 +278,7 @@ def train(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
-        # Conditionally pass validation dataset
-        eval_dataset=val_dataset if val_dataset is not None else None,
+        eval_dataset=val_dataset,
         tokenizer=tokenizer,
         compute_metrics=metrics,
         optimizers=(optimizer, scheduler),
@@ -395,14 +371,17 @@ def load_model(args: argparse.Namespace) -> Trainer:
 # MODE = 'train' e.g. python model/model.py --model pubmedbert --data data/prepared_data/asreview_dataset_all --task 'Relevant Sample'
 def finetune(args: argparse.Namespace) -> None:
     project_path = init_directories(args.model, args.task)
-    save_train_args(project_path, args)
     meta_file = os.path.join(args.data, 'meta.json')
     meta_data = json.load(open(meta_file, 'r'))
     # TODO: solve it nice that meta data is not loaded twice
     train_dataset, test_dataset, val_dataset = load_data(
         args.data, meta_file, args.model)
+    add_params = {
+        'max_length': train_dataset.max_len
+    }
+    save_train_args(project_path, args, add_params)
     trainer = train(project_path, train_dataset,
-                    args, val_dataset=val_dataset, is_multilable=meta_data['Is_multilabel'], task=meta_data['Task'])
+                    args, val_dataset=val_dataset, is_multilabel=meta_data['Is_multilabel'], task=meta_data['Task'])
     evaluate(project_path, trainer, test_dataset)
 
 
@@ -414,7 +393,7 @@ def cont_finetune(args: argparse.Namespace) -> None:
     train_dataset, test_dataset, eval_dataloader = load_data(
         args.data, meta_file, args.model)
     trainer = train(args.load, train_dataset,
-                    args, resume_from_checkpoint=True, is_multilable=meta_data['Is_multilabel'], task=meta_data['Task'])
+                    args, resume_from_checkpoint=True, is_multilabel=meta_data['Is_multilabel'], task=meta_data['Task'])
     evaluate(args.load, trainer, test_dataset)
 
 

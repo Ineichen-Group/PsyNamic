@@ -37,6 +37,10 @@ MODEL_IDENTIFIER = {
 }
 
 # TODO: Fix use_val vs. self.val vs. parameter use_val mess
+# TODO: Use some inheritence with DataHandler and DataHandlerBIO
+# TODO: Make load and get more consistent
+# TODO: Typing and docstrings
+
 class DataSplit(Dataset):
     "PyTorch Dataset class for a given data split."
     ID_COL = 'id'
@@ -150,11 +154,12 @@ class DataSplitBIO(DataSplit):
         self.max_len = max_len
         self.label2id = label2id
         self.tokenizer = tokenizer
-        
+
         # Convert string representations of lists to lists
-        self.df[self.TOKEN_COL] = self.df[self.TOKEN_COL].apply(ast.literal_eval)
+        self.df[self.TOKEN_COL] = self.df[self.TOKEN_COL].apply(
+            ast.literal_eval)
         self.df[self.NER_COL] = self.df[self.NER_COL].apply(ast.literal_eval)
-        
+
         # Make sure the ids of label2id are integers
         self.label2id = {k: int(v) for k, v in self.label2id.items()}
 
@@ -178,13 +183,14 @@ class DataSplitBIO(DataSplit):
         # Align labels with BERT tokens
         labels = [self.label2id[tag] for tag in ner_tags]
         label_ids = [-100] * self.max_len
-        
+
         # Each token is assigned an id: if token is split into multiple subtokens, all subtokens get the same id
         word_ids = encoding.word_ids(batch_index=0)
         previous_word_idx = None
         for i, word_idx in enumerate(word_ids):
             if word_idx is None:
-                label_ids[i] = -100  # -100 as a dummy label for padding tokens or ignored subtokens
+                # -100 as a dummy label for padding tokens or ignored subtokens
+                label_ids[i] = -100
             elif word_idx != previous_word_idx:  # Label only the first subtoken to avoid redundant labels for word pieces
                 label_ids[i] = labels[word_idx]
             previous_word_idx = word_idx
@@ -238,7 +244,6 @@ class DataHandler():
             self.df = self.read_in_data(data_path)
             if not self.nr_classes:
                 self.nr_classes = self._determine_nr_classes()
-            
             self.max_len = self._detect_length()
 
         self.train = None
@@ -250,8 +255,6 @@ class DataHandler():
         self.train_size = 0.8
         self.n_splits = 5
         self.use_val = False
-
-       
 
     def __len__(self) -> int:
         return len(self.df)
@@ -273,7 +276,7 @@ class DataHandler():
             encoded = self.tokenizer.encode(text, add_special_tokens=True)
             lengths.append(len(encoded))
 
-        if 'bert' in self.model:
+        if 'bert' in self.model.lower():
             max_model_length = MAX_MODEL_LENGTH['bert']
             max_length = int(np.percentile(lengths, percentile))
             if max_length > max_model_length:
@@ -541,6 +544,7 @@ class DataHandler():
                 self.use_val = True
             else:
                 self.df = pd.concat([self.train, self.test])
+            self.max_len = self._detect_length()
         else:
             files_in_directory = [f for f in os.listdir(
                 load_path) if path.isfile(path.join(load_path, f))]
@@ -678,9 +682,9 @@ class DataHandlerBIO():
         Returns:
             tuple: Train, test, and validation set. Validation set is None if use_val is False.
         """
-        
+
         if self.use_val is None:
-            self.use_val = use_val       
+            self.use_val = use_val
         # If splits have not been created yet, create them
         if self.train is None:
             np.random.seed(seed)
