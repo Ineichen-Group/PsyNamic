@@ -147,7 +147,7 @@ def train(
 
     if resume_from_checkpoint:
         tokenizer = AutoTokenizer.from_pretrained(args.load)
-        if args.task == 'NER':
+        if 'NER' in args.task:
             model = AutoModelForTokenClassification.from_pretrained(
                 args.load).to(device)
         else:
@@ -156,7 +156,7 @@ def train(
     else:
         model_id = MODEL_IDENTIFIER[args.model]
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        if args.task == 'NER':
+        if 'NER' in args.task:
             model = BertForTokenClassification.from_pretrained(
                 model_id, num_labels=train_dataset.nr_labels).to(device)
         else:
