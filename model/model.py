@@ -141,7 +141,8 @@ def train(
     is_multilabel: bool = False,
     task: str = '',
 ) -> Trainer:
-    device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
+    device_name = args.device if torch.cuda.is_available() else 'cpu'
+    device = torch.device(device_name)
     problem_type = "single_label_classification" if not is_multilabel else "multi_label_classification"
 
     if resume_from_checkpoint:
@@ -175,7 +176,8 @@ def train(
         logging_strategy="epoch",
         run_name=os.path.basename(project_dir),
         resume_from_checkpoint=args.load if resume_from_checkpoint else None,
-        metric_for_best_model='eval_loss' if val_dataset is not None else None
+        metric_for_best_model='eval_loss' if val_dataset is not None else None,
+        use_cpu= device_name == 'cpu',
     )
 
     total_steps = len(train_dataset) * args.epochs
@@ -396,7 +398,7 @@ def cont_finetune(args: argparse.Namespace) -> None:
                     args, resume_from_checkpoint=True, is_multilabel=meta_data['Is_multilabel'], task=meta_data['Task'])
     evaluate(args.load, trainer, test_dataset)
 
-
+#TODO: Enable eval for NER
 # MODE = 'eval', e.g. python model/model.py --mode eval --load model/experiments/pubmedbert_relevant_sample_20240730/checkpoint-565
 def load_and_evaluate(args: argparse.Namespace) -> None:
     exp_path = os.path.dirname(args.load)

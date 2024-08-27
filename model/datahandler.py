@@ -41,6 +41,7 @@ MODEL_IDENTIFIER = {
 # TODO: Make load and get more consistent
 # TODO: Typing and docstrings
 
+
 class DataSplit(Dataset):
     "PyTorch Dataset class for a given data split."
     ID_COL = 'id'
@@ -163,6 +164,7 @@ class DataSplitBIO(DataSplit):
         # Make sure the ids of label2id are integers
         self.label2id = {k: int(v) for k, v in self.label2id.items()}
 
+
     def __getitem__(self, idx: int) -> dict:
         tokens = self.df.iloc[idx][self.TOKEN_COL]
         ner_tags = self.df.iloc[idx][self.NER_COL]
@@ -197,6 +199,11 @@ class DataSplitBIO(DataSplit):
 
         # Add the labels to the encoding
         encoding["labels"] = torch.tensor(label_ids)
+
+        # Debugging: Print the shapes
+        print(f"input_ids shape: {encoding['input_ids'].shape}")
+        print(f"attention_mask shape: {encoding['attention_mask'].shape}")
+        print(f"targets shape: {encoding['labels'].shape}")
 
         # Convert tensor dimensions from (1, max_len) to (max_len)
         return {key: val.squeeze(0) for key, val in encoding.items()}
