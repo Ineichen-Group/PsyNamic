@@ -266,7 +266,7 @@ def train(
 
         return final_results
 
-    if args.task == 'NER':
+    if 'NER' in args.task:
         label_list = train_dataset.labels
         def metrics(p): return compute_bio_metrics(
             (p.predictions, p.label_ids), label_list)
