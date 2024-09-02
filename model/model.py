@@ -300,18 +300,31 @@ def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> 
     # Get predictions
     predictions = trainer.predict(test_dataset)
     labels = predictions.label_ids
-    preds = predictions.predictions.argmax(-1)
+    logits = predictions.predictions
 
     # Calculate probabilities using softmax
-    logits = predictions.predictions
     probabilities = np.exp(logits - np.max(logits, axis=-1, keepdims=True))
     probabilities /= probabilities.sum(axis=-1, keepdims=True)
 
+    # Determine if the task is multilabel
+    is_multilabel = logits.shape[1] > 1 and len(set(np.max(labels, axis=1))) > 1
+    
     # Prepare lists for DataFrame
     data = []
     for i, (id, text, label) in enumerate(test_dataset):
-        prediction = preds[i]
-        probability = probabilities[i][prediction]
+        if is_multilabel:
+            # For multilabel classification
+            # Convert probabilities to binary predictions
+            prediction = (probabilities[i] > 0.5).astype(int)
+            # Save all probabilities for each label
+            probability = probabilities[i].tolist()
+            label = (label > 0.5).astype(int).tolist()  # Ensure label is also in binary format
+        else:
+            # For single-label classification
+            prediction = np.argmax(logits[i])
+            probability = probabilities[i].tolist()
+            label = label
+
         data.append({
             "id": id,
             "text": text,
@@ -328,22 +341,23 @@ def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> 
     df.to_csv(output_file, index=False)
 
     # Compute classification report and save to CSV
-    y_true = labels
-    y_predicted = preds
-    # if there is only one class, the classification report cannot be computed
-    if len(set(y_predicted)) == 1:
-        print('Only one class present in the predictions, classification report cannot be computed.')
-
+    if is_multilabel:
+        try:
+            report_df = classification_report(labels, (probabilities > 0.5).astype(int), target_names=None, zero_division=0, output_dict=True)
+            report_file = os.path.join(project_folder, 'classification_report.csv')
+            pd.DataFrame(report_df).transpose().to_csv(report_file)
+        except Exception as e:
+            print('Error computing classification report for multilabel task:', e)
     else:
         try:
-            report_df = classification_report_with_ci(y_true, y_predicted)
-            report_file = os.path.join(
-                project_folder, 'classification_report.csv')
-            pd.DataFrame(report_df).to_csv(report_file)
+            report_df = classification_report(labels, np.argmax(logits, axis=1), output_dict=True)
+            report_file = os.path.join(project_folder, 'classification_report.csv')
+            pd.DataFrame(report_df).transpose().to_csv(report_file)
         except Exception as e:
-            print('Error computing classification report:', e)
+            print('Error computing classification report for single-label task:', e)
 
     return output_file
+
 
 
 def set_args_from_file(args: argparse.Namespace) -> argparse.Namespace:

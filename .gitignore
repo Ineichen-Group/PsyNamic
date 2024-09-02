@@ -210,6 +210,7 @@ prodigy_data/
 vscode/*
 vscode/launch.json
 model/experiments/*
+model/collected_results/*
 wandb/*
 log/*
 training_scripts/*
