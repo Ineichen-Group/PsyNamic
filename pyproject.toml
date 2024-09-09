@@ -22,6 +22,8 @@ wandb = "^0.17.4"
 confidenceinterval = {git = "https://github.com/jacobgil/confidenceinterval.git"}
 evaluate = "^0.4.2"
 seqeval = "^1.2.2"
+django = "^5.1.1"
+psycopg = "^3.2.1"
 [tool.poetry.group.dev.dependencies]
 pandas = "^2.2.2"
 
