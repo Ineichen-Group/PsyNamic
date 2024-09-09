@@ -24,6 +24,7 @@ from datahandler import DataHandler, DataSplitBIO, DataHandlerBIO, PsychNamicRel
 from abc import ABC, abstractmethod
 from evaluate import load
 from typing import Union
+from ast import literal_eval
 
 
 # rf. https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/BERT/Fine_tuning_BERT_(and_friends)_for_multi_label_text_classification.ipynb#scrollTo=797b2WHJqUgZ for multilabel tuning
@@ -305,20 +306,17 @@ def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> 
     # Calculate probabilities using softmax
     probabilities = np.exp(logits - np.max(logits, axis=-1, keepdims=True))
     probabilities /= probabilities.sum(axis=-1, keepdims=True)
-
-    # Determine if the task is multilabel
-    is_multilabel = logits.shape[1] > 1 and len(set(np.max(labels, axis=1))) > 1
     
     # Prepare lists for DataFrame
     data = []
     for i, (id, text, label) in enumerate(test_dataset):
-        if is_multilabel:
+        if test_dataset.is_multilabel:
             # For multilabel classification
             # Convert probabilities to binary predictions
-            prediction = (probabilities[i] > 0.5).astype(int)
+            prediction = (probabilities[i] > 0.5).astype(int).tolist()
             # Save all probabilities for each label
             probability = probabilities[i].tolist()
-            label = (label > 0.5).astype(int).tolist()  # Ensure label is also in binary format
+            label = literal_eval(label) # Ensure label is also in binary format
         else:
             # For single-label classification
             prediction = np.argmax(logits[i])
@@ -341,7 +339,7 @@ def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> 
     df.to_csv(output_file, index=False)
 
     # Compute classification report and save to CSV
-    if is_multilabel:
+    if test_dataset.is_multilabel:
         try:
             report_df = classification_report(labels, (probabilities > 0.5).astype(int), target_names=None, zero_division=0, output_dict=True)
             report_file = os.path.join(project_folder, 'classification_report.csv')
@@ -357,7 +355,6 @@ def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> 
             print('Error computing classification report for single-label task:', e)
 
     return output_file
-
 
 
 def set_args_from_file(args: argparse.Namespace) -> argparse.Namespace:
@@ -398,6 +395,7 @@ def finetune(args: argparse.Namespace) -> None:
     save_train_args(project_path, args, add_params)
     trainer = train(project_path, train_dataset,
                     args, val_dataset=val_dataset, is_multilabel=meta_data['Is_multilabel'], task=meta_data['Task'])
+    
     evaluate(project_path, trainer, test_dataset)
 
 
@@ -417,8 +415,16 @@ def cont_finetune(args: argparse.Namespace) -> None:
 def load_and_evaluate(args: argparse.Namespace) -> None:
     exp_path = os.path.dirname(args.load)
     args = set_args_from_file(args)
+    data_meta_file = os.path.join(args.data, 'meta.json')
+    with open(data_meta_file, 'r') as f:
+        data_meta_data = json.load(f)
+    train_meta_file = os.path.join(exp_path, 'params.json')
+    with open(train_meta_file, 'r') as f:
+        train_meta_data = json.load(f)
+    
     trainer = load_model(args)
-    test_dataset = load_data(args.data, model=args.model)[1]
+    # TODO: load data metafile in load_data
+    test_dataset = load_data(train_meta_data['data'], data_meta_file, train_meta_data['model'])[1]
     evaluate(exp_path, trainer, test_dataset)
 
 
