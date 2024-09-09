@@ -31,7 +31,7 @@
 | V9              | psychedelic_study_250_20240730_095458.jsonl       | 250   | In Progress    | Pia                      |                         |
 
 Current Total annotated: 100 + 50 + 100 + 52 + 250 + 250 + 95 + 24 + 40 = 961
-Has to be reannotated (earlier annotation guidelines or not cross-checked): 100 + 100 + 52 + 250 = 502
+Has to be reannotated (earlier annotation guidelines or not cross-checked): 100 + 100 + 52 + 250 + 110 = 512
 Current Total with last annotation standard: 95 + 50 + 24 + 40 + 250 = 459
 
 Need to be reannotated: 200
