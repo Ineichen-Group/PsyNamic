@@ -143,7 +143,20 @@ def prepare_splits():
     data_handler.get_strat_split(use_val=True)
     data_handler.save_split(f'data/prepared_data/asreview_dataset_all/')
 
-
+def prepare_all(outfile: str):
+    file = 'data/raw_data/asreview_dataset_all_Psychedelic Study.csv'
+    df = pd.read_csv(file)
+    # get distribution of included column, including nan
+    print(df['included'].value_counts(dropna=False))
+    print(len(df))
+    data_handler = PsychNamicRelevant(
+        file, 'record_id', 'title', 'abstract', 'included')
+    # where included is 1
+    df = data_handler.df[data_handler.df['labels'] == 1]
+    print(len(df))
+    df = df.drop(columns=['labels'])
+    df.to_csv(outfile, index=False)    
+    
 # if main equal name
 if __name__ == '__main__':
     list_jsonl = [
@@ -174,3 +187,5 @@ if __name__ == '__main__':
     # prepare_splits()
     prepare_bio_data(list_json_bio, 'record_id',
                      'data/prepared_data/ner_bio.jsonl')
+    outfile = 'data/prepared_data/all/psychedelic_study_relevant.csv'
+    prepare_all(outfile)

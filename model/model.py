@@ -1,31 +1,30 @@
 import argparse
 import json
 import os
+from abc import ABC, abstractmethod
+from ast import literal_eval
 from datetime import datetime
+from typing import Union
+
 import numpy as np
 import pandas as pd
 import torch
-from torch.optim import AdamW
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
-from transformers import (
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    AutoModelForTokenClassification,
-    BertForTokenClassification,
-    BertTokenizer,
-    BertForSequenceClassification,
-    TrainingArguments,
-    Trainer,
-    EarlyStoppingCallback,
-    get_linear_schedule_with_warmup
-)
 from confidenceinterval import classification_report_with_ci
-from datahandler import DataHandler, DataSplitBIO, DataHandlerBIO, PsychNamicRelevant, PsyNamicSingleLabel, DataSplit, MODEL_IDENTIFIER
-from abc import ABC, abstractmethod
+from datahandler import (MODEL_IDENTIFIER, DataHandler, DataHandlerBIO,
+                         DataSplit, DataSplitBIO, PsychNamicRelevant,
+                         PsyNamicSingleLabel, SimpleDataset)
+from datasets import Dataset
 from evaluate import load
-from typing import Union
-from ast import literal_eval
-
+from sklearn.metrics import (accuracy_score, f1_score, precision_score,
+                             recall_score, roc_auc_score)
+from torch.optim import AdamW
+from torch.utils.data import DataLoader
+from transformers import (AutoModelForSequenceClassification,
+                          AutoModelForTokenClassification, AutoTokenizer,
+                          BertForSequenceClassification,
+                          BertForTokenClassification, BertTokenizer,
+                          EarlyStoppingCallback, Trainer, TrainingArguments,
+                          get_linear_schedule_with_warmup)
 
 # rf. https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/BERT/Fine_tuning_BERT_(and_friends)_for_multi_label_text_classification.ipynb#scrollTo=797b2WHJqUgZ for multilabel tuning
 
@@ -63,11 +62,92 @@ class BertTrainer(CustomTrainer):
     pass
 
 
+def compute_binary_metrics(pred):
+    """Compute binary classification metrics"""
+    labels = pred.label_ids
+    preds = pred.predictions.argmax(-1)
+    accuracy = accuracy_score(labels, preds)
+    precision = precision_score(
+        labels, preds, average='weighted', zero_division=0)
+    recall = recall_score(labels, preds, average='weighted')
+    f1 = f1_score(labels, preds, average='weighted')
+    return {
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'f1': f1
+    }
+
+
+def compute_multilabel_metrics(pred, threshold=0.5, average='micro'):
+    """Compute multilabel classification metrics"""
+    sigmoid = torch.nn.Sigmoid()
+    probs = sigmoid(torch.Tensor(pred.predictions))
+    labels = pred.label_ids
+    y_pred = np.zeros(probs.shape)
+    y_pred[np.where(probs >= threshold)] = 1
+
+    metrics = {
+        'f1': f1_score(y_true=labels, y_pred=y_pred, average=average),
+        'roc_auc': roc_auc_score(labels, y_pred, average=average),
+        'accuracy': accuracy_score(labels, y_pred),
+        'precision': precision_score(labels, y_pred, average=average),
+        'recall': recall_score(labels, y_pred, average=average),
+    }
+
+    return metrics
+
+
+def compute_bio_metrics(p, label_list):
+    """Compute metrics for NER tasks"""
+    metric = load("seqeval")
+
+    predictions, labels = p
+    predictions = np.argmax(predictions, axis=2)
+
+    true_predictions = [
+        [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
+        for prediction, label in zip(predictions, labels)
+    ]
+    true_labels = [
+        [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
+        for prediction, label in zip(predictions, labels)
+    ]
+
+    results = metric.compute(
+        predictions=true_predictions, references=true_labels)
+    final_results = {}
+
+    final_results["overall_precision"] = results["overall_precision"]
+    final_results["overall_recall"] = results["overall_recall"]
+    final_results["overall_f1"] = results["overall_f1"]
+    final_results["overall_accuracy"] = results["overall_accuracy"]
+
+    for key, value in results.items():
+        if isinstance(value, dict):
+            for n, v in value.items():
+                final_results[f"{key}_{n}"] = v
+
+    Ps, Rs, Fs = [], [], []
+    for type_name in results:
+        if type_name.startswith("overall"):
+            continue
+        Ps.append(results[type_name]["precision"])
+        Rs.append(results[type_name]["recall"])
+        Fs.append(results[type_name]["f1"])
+
+    final_results["macro_precision"] = np.mean(Ps)
+    final_results["macro_recall"] = np.mean(Rs)
+    final_results["macro_f1"] = np.mean(Fs)
+
+    return final_results
+
+
 def init_argparse():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--mode', type=str,
-                        choices=['train', 'cont_train', 'eval'], default='train')
+                        choices=['train', 'cont_train', 'eval', 'pred'], default='train')
     parser.add_argument('--data', type=str)
     parser.add_argument('--task', type=str)
 
@@ -124,7 +204,8 @@ def load_data(data: str, meta_file: str, model: str) -> tuple[DataSplit, DataSpl
         train_dataset, test_dataset, eval_dataset = datahandler.get_split()
 
     else:
-        datahandler = DataHandler(data_path=data, model=model, meta_file=meta_file)
+        datahandler = DataHandler(
+            data_path=data, model=model, meta_file=meta_file)
         # TODO: clean up usage of use_val
         use_val = datahandler.load_splits(data)
         train_dataset, test_dataset, eval_dataset = datahandler.get_strat_split(
@@ -178,7 +259,7 @@ def train(
         run_name=os.path.basename(project_dir),
         resume_from_checkpoint=args.load if resume_from_checkpoint else None,
         metric_for_best_model='eval_loss' if val_dataset is not None else None,
-        use_cpu= device_name == 'cpu',
+        use_cpu=device_name == 'cpu',
     )
 
     total_steps = len(train_dataset) * args.epochs
@@ -191,90 +272,15 @@ def train(
     )
 
     # Define compute metrics function
-    def compute_metrics(pred):
-        labels = pred.label_ids
-        preds = pred.predictions.argmax(-1)
-        accuracy = accuracy_score(labels, preds)
-        precision = precision_score(
-            labels, preds, average='weighted', zero_division=0)
-        recall = recall_score(labels, preds, average='weighted')
-        f1 = f1_score(labels, preds, average='weighted')
-        return {
-            'accuracy': accuracy,
-            'precision': precision,
-            'recall': recall,
-            'f1': f1
-        }
-
-    def multi_label_metrics(pred):
-        threshold = 0.5
-        sigmoid = torch.nn.Sigmoid()
-        probs = sigmoid(torch.Tensor(pred.predictions))
-        labels = pred.label_ids
-        y_pred = np.zeros(probs.shape)
-        y_pred[np.where(probs >= threshold)] = 1
-
-        metrics = {
-            'f1': f1_score(y_true=labels, y_pred=y_pred, average='micro'),
-            'roc_auc': roc_auc_score(labels, y_pred, average='micro'),
-            'accuracy': accuracy_score(labels, y_pred),
-            'precision': precision_score(labels, y_pred, average='micro'),
-            'recall': recall_score(labels, y_pred, average='micro')
-        }
-
-        return metrics
-
-    def compute_bio_metrics(p, label_list):
-        metric = load("seqeval")
-
-        predictions, labels = p
-        predictions = np.argmax(predictions, axis=2)
-
-        true_predictions = [
-            [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
-            for prediction, label in zip(predictions, labels)
-        ]
-        true_labels = [
-            [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
-            for prediction, label in zip(predictions, labels)
-        ]
-
-        results = metric.compute(
-            predictions=true_predictions, references=true_labels)
-        final_results = {}
-
-        final_results["overall_precision"] = results["overall_precision"]
-        final_results["overall_recall"] = results["overall_recall"]
-        final_results["overall_f1"] = results["overall_f1"]
-        final_results["overall_accuracy"] = results["overall_accuracy"]
-
-        for key, value in results.items():
-            if isinstance(value, dict):
-                for n, v in value.items():
-                    final_results[f"{key}_{n}"] = v
-
-        Ps, Rs, Fs = [], [], []
-        for type_name in results:
-            if type_name.startswith("overall"):
-                continue
-            Ps.append(results[type_name]["precision"])
-            Rs.append(results[type_name]["recall"])
-            Fs.append(results[type_name]["f1"])
-
-        final_results["macro_precision"] = np.mean(Ps)
-        final_results["macro_recall"] = np.mean(Rs)
-        final_results["macro_f1"] = np.mean(Fs)
-
-        return final_results
 
     if 'NER' in args.task:
         label_list = train_dataset.labels
         def metrics(p): return compute_bio_metrics(
             (p.predictions, p.label_ids), label_list)
     elif is_multilabel:
-        metrics = multi_label_metrics
+        metrics = compute_multilabel_metrics
     else:
-        metrics = compute_metrics
+        metrics = compute_binary_metrics
 
     # Initialize the Trainer
     trainer = Trainer(
@@ -297,7 +303,7 @@ def train(
     return trainer
 
 
-def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> str:
+def predict(project_folder: str, trainer: Trainer, test_dataset: DataSplit, outfile = None) -> str:
     # Get predictions
     predictions = trainer.predict(test_dataset)
     labels = predictions.label_ids
@@ -306,7 +312,7 @@ def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> 
     # Calculate probabilities using softmax
     probabilities = np.exp(logits - np.max(logits, axis=-1, keepdims=True))
     probabilities /= probabilities.sum(axis=-1, keepdims=True)
-    
+
     # Prepare lists for DataFrame
     data = []
     for i, (id, text, label) in enumerate(test_dataset):
@@ -316,7 +322,8 @@ def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> 
             prediction = (probabilities[i] > 0.5).astype(int).tolist()
             # Save all probabilities for each label
             probability = probabilities[i].tolist()
-            label = literal_eval(label) # Ensure label is also in binary format
+            # Ensure label is also in binary format
+            label = literal_eval(label)
         else:
             # For single-label classification
             prediction = np.argmax(logits[i])
@@ -335,21 +342,31 @@ def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> 
     df = pd.DataFrame(data)
 
     # Save DataFrame to CSV
-    output_file = os.path.join(project_folder, 'predictions.csv')
+    filename = 'predictions.csv' if outfile is None else f'{outfile}_predictions.csv'
+    output_file = os.path.join(project_folder, filename)
     df.to_csv(output_file, index=False)
+    return output_file
 
+
+#TODO: Fix evaluate
+def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> str:
+    output_file = predict(project_folder, trainer, test_dataset)
     # Compute classification report and save to CSV
     if test_dataset.is_multilabel:
         try:
-            report_df = classification_report(labels, (probabilities > 0.5).astype(int), target_names=None, zero_division=0, output_dict=True)
-            report_file = os.path.join(project_folder, 'classification_report.csv')
+            report_df = classification_report(labels, (probabilities > 0.5).astype(
+                int), target_names=None, zero_division=0, output_dict=True)
+            report_file = os.path.join(
+                project_folder, 'classification_report.csv')
             pd.DataFrame(report_df).transpose().to_csv(report_file)
         except Exception as e:
             print('Error computing classification report for multilabel task:', e)
     else:
         try:
-            report_df = classification_report(labels, np.argmax(logits, axis=1), output_dict=True)
-            report_file = os.path.join(project_folder, 'classification_report.csv')
+            report_df = classification_report(
+                labels, np.argmax(logits, axis=1), output_dict=True)
+            report_file = os.path.join(
+                project_folder, 'classification_report.csv')
             pd.DataFrame(report_df).transpose().to_csv(report_file)
         except Exception as e:
             print('Error computing classification report for single-label task:', e)
@@ -377,7 +394,11 @@ def load_model(args: argparse.Namespace) -> Trainer:
     device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
     model = AutoModelForSequenceClassification.from_pretrained(
         args.load).to(device)
-    trainer = Trainer(model=model)
+    tokenizer = AutoTokenizer.from_pretrained(args.load)
+    trainer = Trainer(
+        model=model,
+        compute_metrics=compute_multilabel_metrics,
+        tokenizer=tokenizer)
     return trainer
 
 
@@ -390,12 +411,13 @@ def finetune(args: argparse.Namespace) -> None:
     train_dataset, test_dataset, val_dataset = load_data(
         args.data, meta_file, args.model)
     add_params = {
-        'max_length': train_dataset.max_len
+        'max_length': train_dataset.max_len,
+        'is_multilabel': meta_data['is_multilabel'],
     }
     save_train_args(project_path, args, add_params)
     trainer = train(project_path, train_dataset,
                     args, val_dataset=val_dataset, is_multilabel=meta_data['Is_multilabel'], task=meta_data['Task'])
-    
+
     evaluate(project_path, trainer, test_dataset)
 
 
@@ -410,22 +432,62 @@ def cont_finetune(args: argparse.Namespace) -> None:
                     args, resume_from_checkpoint=True, is_multilabel=meta_data['Is_multilabel'], task=meta_data['Task'])
     evaluate(args.load, trainer, test_dataset)
 
-#TODO: Enable eval for NER
+# TODO: Enable eval for NER
 # MODE = 'eval', e.g. python model/model.py --mode eval --load model/experiments/pubmedbert_relevant_sample_20240730/checkpoint-565
+
+
 def load_and_evaluate(args: argparse.Namespace) -> None:
-    exp_path = os.path.dirname(args.load)
+    # Load model from path
     args = set_args_from_file(args)
+    trainer = load_model(args)
+
+    exp_path = os.path.dirname(args.load)
     data_meta_file = os.path.join(args.data, 'meta.json')
-    with open(data_meta_file, 'r') as f:
-        data_meta_data = json.load(f)
     train_meta_file = os.path.join(exp_path, 'params.json')
     with open(train_meta_file, 'r') as f:
         train_meta_data = json.load(f)
-    
-    trainer = load_model(args)
+
     # TODO: load data metafile in load_data
-    test_dataset = load_data(train_meta_data['data'], data_meta_file, train_meta_data['model'])[1]
+    test_dataset = load_data(
+        train_meta_data['data'], data_meta_file, train_meta_data['model'])[1]
     evaluate(exp_path, trainer, test_dataset)
+
+
+# MODE = 'pred', e.g. python model/model.py --mode pred --load model/experiments/pubmedbert_relevant_sample_20240730/checkpoint-565 --data data/prepared_data/all/psychedelic_study_relevant.csv
+def load_and_predict(args: argparse.Namespace) -> None:
+    # Load model from path
+    args = set_args_from_file(args)
+    trainer = load_model(args)
+
+    exp_path = os.path.dirname(args.load)
+    train_meta_file = os.path.join(exp_path, 'params.json')
+    with open(train_meta_file, 'r') as f:
+        train_meta_data = json.load(f)
+
+    # Case 1: Test split of training used
+    if args.data is None:
+        data_meta_file = os.path.join(args.data, 'meta.json')
+        data = train_meta_data['data']
+        dataset = load_data(
+            train_meta_data['data'], data_meta_file, train_meta_data['model'])[1]
+        outfile_name = f'{os.path.basename(args.load)}_test_split'
+        outfile = predict(exp_path, trainer, dataset, outfile_name)
+    else:
+        # check if it is a file
+        if os.path.isfile(args.data):
+            data = args.data
+        else:
+            raise ValueError('Please provide a valid path to the data file')
+        model = MODEL_IDENTIFIER[train_meta_data['model']]
+        tokenizer = AutoTokenizer.from_pretrained(model)
+        max_length = train_meta_data['max_length']
+        
+        # TODO: do not hardcode is_multilabel
+        dataset = SimpleDataset(data, tokenizer, max_length, True)
+        # checkpoint + file
+        outfile_name = f'{os.path.basename(args.load)}_{os.path.basename(data).split(".")[0]}'
+        outfile = predict(exp_path, trainer, dataset, outfile_name)
+    return outfile
 
 
 def main():
@@ -450,6 +512,12 @@ def main():
             print('Defaulting to test data split used for training')
 
         load_and_evaluate(args)
+    elif args.mode == 'pred':
+        if args.load is None or not os.path.exists(args.load):
+            raise ValueError(
+                'Please provide the correct path to the experiment folder to continue training')
+
+        load_and_predict(args)
 
 
 if __name__ == "__main__":

@@ -142,7 +142,46 @@ class DataSplit(Dataset):
                 return True
         return False
 
-
+class SimpleDataset(Dataset):
+    """Simple class to predict but not evaluate on a dataset."""
+    
+    ID_COL = 'id'
+    TEXT_COL = 'text'
+    
+    def __init__(self, csv_file, tokenizer, max_len, multilabel):
+        self.df = pd.read_csv(csv_file)
+        self.tokenizer = tokenizer
+        self.max_len = max_len
+        self.is_multilabel = multilabel
+    
+    def __len__(self):
+        return len(self.df)
+    
+    def __getitem__(self, idx):
+        text = self.df.iloc[idx][self.TEXT_COL]
+        encoding = self.tokenizer(
+            text,
+            truncation=True,
+            padding='max_length',
+            max_length=self.max_len,
+            return_tensors='pt'
+        )
+        return {key: val.squeeze(0) for key, val in encoding.items()}
+    
+    def __next__(self):
+        if self._index < len(self.df):
+            id_ = self.df.iloc[self._index][self.ID_COL]
+            text = self.df.iloc[self._index][self.TEXT_COL]
+            label = '[]' # TODO: a little hacky, fix later
+            self._index += 1
+            return id_, text, label
+        else:
+            raise StopIteration
+    
+    def __iter__(self):
+        self._index = 0
+        return self
+        
 class DataSplitBIO(DataSplit):
     """ PyTorch Dataset class for a given data split for NER tasks.
 

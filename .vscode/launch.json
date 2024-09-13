@@ -20,10 +20,10 @@
             "console": "integratedTerminal",
             "justMyCode": false,
             "args": [
-                "--model", "pubmedbert",
-                "--data", "data/prepared_data/mini_test_set",
-                "--task", "Mini Relevant Sample",
-                "--epoch", "30"
+                "--model", "scibert",
+                "--data", "data/prepared_data/substances",
+                "--task", "Substances",
+                "--epoch", "10"
             ]
         },
         {
@@ -38,6 +38,32 @@
                 "--data", "data/prepared_data/ner_bio",
                 "--task", "NER",
                 "--epoch", "10"
+            ]
+        },
+        {
+            "name": "Eval with args",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/model/model.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--mode", "eval",
+                "--load", "model/experiments/pubmedbert_substances_20240902/checkpoint-440",
+            ]
+        },
+        {
+            "name": "Predict with args",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/model/model.py",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "args": [
+                "--mode", "pred",
+                "--load", "model/experiments/pubmedbert_condition_20240912/checkpoint-792",
+                "--data", "data/prepared_data/all/psychedelic_study_relevant.csv",
+                "--task", "Condition",
             ]
         }
     ]
