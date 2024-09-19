@@ -51,7 +51,7 @@ class Study(models.Model):
     predictions = models.ManyToManyField(Prediction)
 
     def __str__(self):
-        return self.title
+        return self.text
 
     def get_prediction(self, label_class: str, prob_threshold: float = 0.5) -> list[str]:
         # check if label_class exists

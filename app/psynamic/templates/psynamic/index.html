@@ -1,0 +1,19 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>{% block title %}{% endblock %}</title>
+    {% load bootstrap5 %} {% bootstrap_css %} {% bootstrap_javascript %}
+  </head>
+  <body>
+    <div>{% include 'psynamic/header.html' %}</div>
+    <ul>
+      {% for s in studies %}
+      <li>
+        <div>{{s.text}}</div>
+      </li>
+      {% endfor %}
+    </ul>
+  </body>
+  {% include 'psynamic/footer.html' %}
+</html>
