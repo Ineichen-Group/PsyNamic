@@ -1,11 +1,16 @@
-import pandas as pd
 import json
-from django.core.management.base import BaseCommand, CommandParser
-from psynamic.models import Study, Prediction, Label, LabelClass, ClassGroup
-from ast import literal_eval 
 import os
+from ast import literal_eval
 
-# python manage.py import_predictions /home/vera/Documents/Arbeit/CRS/PsychNER/model/experiments/pubmedbert_substances_20240902/predictions.csv /home/vera/Documents/Arbeit/CRS/PsychNER/model/experiments/pubmedbert_substances_20240902/params.json
+import pandas as pd
+from django.core.management.base import BaseCommand, CommandParser
+from psynamic.models import ClassGroup, Label, LabelClass, Prediction, Study
+from tqdm import tqdm
+
+# python manage.py import_predictions /home/vera/Documents/Arbeit/CRS/PsychNER/model/experiments/pubmedbert_condition_20240912/checkpoint-792_psychedelic_study_relevant_predictions.csv /home/vera/Documents/Arbeit/CRS/PsychNER/model/experiments/pubmedbert_condition_20240912/params.json
+
+# python manage.py import_predictions /home/vera/Documents/Arbeit/CRS/PsychNER/model/experiments/pubmedbert_substances_20240902/checkpoint-440_psychedelic_study_relevant_predictions.csv /home/vera/Documents/Arbeit/CRS/PsychNER/model/experiments/pubmedbert_substances_20240902/params.json
+
 class Command(BaseCommand):
     help = 'Import predictions from a CSV file into the database'
 
@@ -29,18 +34,17 @@ class Command(BaseCommand):
             meta = json.load(file)
             int_to_label = meta['Int_to_label']
             int_to_label = {int(k): v for k, v in int_to_label.items()}
-            
+        task = task.capitalize()
         labels = LabelClass.objects.get(name=task).labels.all()
-            
-        for _, row in pred_df.iterrows():
+        for _, row in tqdm(pred_df.iterrows(), total=pred_df.shape[0], desc="Importing predictions"):
             # check if study already exists
-            id = row['id']
+            study_id = row['id']
             # get or create study
             try:
-                study = Study.objects.get(id=id)
+                study = Study.objects.get(id=study_id)
             except Study.DoesNotExist:
-                Study.objects.create(
-                    id=id,
+                study = Study.objects.create(
+                    id=study_id,
                     text=row['text']
                 )
             probabilities = literal_eval(row['probability'])

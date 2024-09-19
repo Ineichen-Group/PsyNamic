@@ -27,7 +27,7 @@ class LabelClass(models.Model):
 
 class Label(models.Model):
     id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=200, unique=True)
+    name = models.CharField(max_length=200)
     description = models.TextField()
     label_class = models.ForeignKey(
         LabelClass, on_delete=models.CASCADE, related_name='labels')
