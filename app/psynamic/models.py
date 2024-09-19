@@ -1,6 +1,5 @@
 from django.db import models
-
-# Create your models here.
+import pandas as pd
 
 
 class ClassGroup(models.Model):
@@ -47,7 +46,8 @@ class Prediction(models.Model):
 
 class Study(models.Model):
     id = models.AutoField(primary_key=True)
-    text = models.TextField(default='') # Title + Abstract as presented in prodigy
+    # Title + Abstract as presented in prodigy
+    text = models.TextField(default='')
     predictions = models.ManyToManyField(Prediction)
 
     def __str__(self):
@@ -69,3 +69,30 @@ class Study(models.Model):
         # if single label return the label with the highest probability
         else:
             return [max(predictions, key=lambda x: x.probability).label.name]
+
+    @classmethod
+    def get_prediction_df(self, label_classes: list[str], prob_thresholds: list[str] = None) -> pd.DataFrame:
+        df = None
+        # Loop through each label class and its corresponding probability threshold
+        for label_class, prob_threshold in zip(label_classes, prob_thresholds):
+            class_df = self.get_predictions(label_class, prob_threshold)
+            if df is None:
+                df = class_df
+            else:
+                df = df.merge(class_df, on='id')
+        return df
+
+    @classmethod
+    def get_predictions(self, label_class: str, prob_threshold: str):
+        "Returns prediction for all studies as a list"
+
+        data = []
+        #TODO: Speed this up, massively!
+        for study in self.objects.all():
+            data_instance = {
+                'id': study.id,
+                label_class: study.get_prediction(label_class, prob_threshold)
+            }
+            data.append(data_instance)
+
+        return pd.DataFrame(data)

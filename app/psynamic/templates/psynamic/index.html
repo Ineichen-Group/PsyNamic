@@ -4,16 +4,35 @@
   <head>
     <title>{% block title %}{% endblock %}</title>
     {% load bootstrap5 %} {% bootstrap_css %} {% bootstrap_javascript %}
+    <link
+      href="http://cdn.pydata.org/bokeh/release/bokeh-3.5.2.min.css"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <link
+      href="http://cdn.pydata.org/bokeh/release/bokeh-widgets-3.5.2.min.css"
+      rel="stylesheet"
+      type="text/css"
+    />
   </head>
   <body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bokeh/3.5.2/bokeh.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bokeh/3.5.2/bokeh-widgets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bokeh/3.5.2/bokeh-tables.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bokeh/3.5.2/bokeh-api.min.js"></script>
     <div>{% include 'psynamic/header.html' %}</div>
-    <ul>
-      {% for s in studies %}
-      <li>
-        <div>{{s.text}}</div>
-      </li>
-      {% endfor %}
-    </ul>
+    <div class="m-3" , style="overflow: scroll; height: 400px">
+      <h1>Bokeh Graph</h1>
+      {{div | safe}} {{script | safe}}
+      <ul>
+        {% for s in studies %}
+        <li>
+          <div>{{s.text}}</div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
   </body>
+
   {% include 'psynamic/footer.html' %}
 </html>
