@@ -4,7 +4,7 @@ from ast import literal_eval
 
 import pandas as pd
 from django.core.management.base import BaseCommand, CommandParser
-from psynamic.models import ClassGroup, Label, LabelClass, Prediction, Study
+from psynamic.models import LabelClass, Prediction, Study
 from tqdm import tqdm
 
 # python manage.py import_predictions /home/vera/Documents/Arbeit/CRS/PsychNER/model/experiments/pubmedbert_condition_20240912/checkpoint-792_psychedelic_study_relevant_predictions.csv /home/vera/Documents/Arbeit/CRS/PsychNER/model/experiments/pubmedbert_condition_20240912/params.json
