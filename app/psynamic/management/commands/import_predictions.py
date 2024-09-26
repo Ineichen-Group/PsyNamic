@@ -34,8 +34,12 @@ class Command(BaseCommand):
             meta = json.load(file)
             int_to_label = meta['Int_to_label']
             int_to_label = {int(k): v for k, v in int_to_label.items()}
+            is_multilabel = meta['Is_multilabel']
         task = task.capitalize()
-        labels = LabelClass.objects.get(name=task).labels.all()
+        label_class = LabelClass.objects.get(name=task)
+        labels = label_class.labels.all()
+        label_class.is_multilabel = is_multilabel
+        label_class.save()
         for _, row in tqdm(pred_df.iterrows(), total=pred_df.shape[0], desc="Importing predictions"):
             # check if study already exists
             study_id = row['id']

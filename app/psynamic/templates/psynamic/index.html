@@ -21,18 +21,17 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bokeh/3.5.2/bokeh-tables.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bokeh/3.5.2/bokeh-api.min.js"></script>
     <div>{% include 'psynamic/header.html' %}</div>
-    <div class="m-3" , style="overflow: scroll; height: 400px">
-      <h1>Bokeh Graph</h1>
-      {{div | safe}} {{script | safe}}
+    <div class="m-3">
+      {{ div | safe }}
+      {{ script | safe }}
       <ul>
         {% for s in studies %}
         <li>
-          <div>{{s.text}}</div>
+          <div>{{ s.text }}</div>
         </li>
         {% endfor %}
       </ul>
     </div>
+    {% include 'psynamic/footer.html' %}
   </body>
-
-  {% include 'psynamic/footer.html' %}
 </html>

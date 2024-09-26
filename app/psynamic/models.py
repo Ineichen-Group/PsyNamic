@@ -15,7 +15,7 @@ class LabelClass(models.Model):
     description = models.TextField()
     class_group = models.ForeignKey(
         ClassGroup, on_delete=models.CASCADE, related_name='classes')
-    is_multilable = models.BooleanField(default=False)
+    is_multilabel = models.BooleanField(default=False)
 
     def __str__(self):
         return self.name
@@ -59,16 +59,29 @@ class Study(models.Model):
             label_class = LabelClass.objects.get(name=label_class)
         except LabelClass.DoesNotExist:
             raise ValueError(f'LabelClass {label_class} does not exist')
+        labels = label_class.labels.all()
+        # get predictions
+        predictions = self.predictions.filter(label__in=labels)
+        if label_class.is_multilabel:
+            return [p.label.name for p in predictions if p.probability >= prob_threshold]
+        # if single label return the label with the highest probability
+        else:
+            breakpoint()
+            return [max(predictions, key=lambda x: x.probability).label.name]
+
+    def get_pre_prob(self, label_class: str) -> dict:
+        # get the prediction probabilities for a given label class
+        # check if label_class exists
+        try:
+            label_class = LabelClass.objects.get(name=label_class)
+        except LabelClass.DoesNotExist:
+            raise ValueError(f'LabelClass {label_class} does not exist')
 
         labels = label_class.labels.all()
         # get predictions
         predictions = self.predictions.filter(label__in=labels)
-
-        if label_class.is_multilable:
-            return [p.label.name for p in predictions if p.probability >= prob_threshold]
-        # if single label return the label with the highest probability
-        else:
-            return [max(predictions, key=lambda x: x.probability).label.name]
+        
+        return {p.label.name: p.probability for p in predictions}
 
     @classmethod
     def get_prediction_df(self, label_classes: list[str], prob_thresholds: list[str] = None) -> pd.DataFrame:
