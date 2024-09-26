@@ -14,24 +14,109 @@
       rel="stylesheet"
       type="text/css"
     />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/css/bootstrap.min.css"
+      integrity="sha384-Gn5384xqQ1aoWXA+058RXPxPg6fy4IWvTNh0E263XmFcJlSAwiGgFAW/dAiS6JXm"
+      crossorigin="anonymous"
+    />
+    <link
+      href="{% static 'fontawesomefree/css/fontawesome.css' %}"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <link
+      href="{% static 'fontawesomefree/css/brands.css' %}"
+      rel="stylesheet"
+      type="text/css"
+    />
+    <link
+      href="{% static 'fontawesomefree/css/solid.css' %}"
+      rel="stylesheet"
+      type="text/css"
+    />
   </head>
   <body>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bokeh/3.5.2/bokeh.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bokeh/3.5.2/bokeh-widgets.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bokeh/3.5.2/bokeh-tables.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bokeh/3.5.2/bokeh-api.min.js"></script>
+    <script
+      src="https://code.jquery.com/jquery-3.2.1.slim.min.js"
+      integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/popper.js@1.12.9/dist/umd/popper.min.js"
+      integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@4.0.0/dist/js/bootstrap.min.js"
+      integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
+      crossorigin="anonymous"
+    ></script>
     <div>{% include 'psynamic/header.html' %}</div>
-    <div class="m-3">
-      {{ div | safe }}
-      {{ script | safe }}
-      <ul>
+    <div class="m-4">{{ div | safe }} {{ script | safe }}</div>
+
+
+    <div class="m-4" style="border: 1px solid #ededed">
+      <h3 class="m-4">Studies</h3>
+
+      <div class="m-4">
+        {% comment %} <form method="GET" action="{% url 'search_studies' %}" class="form-inline my-2 my-lg-0"> {% endcomment %}
+        <form class="form-inline my-2 my-lg-0">
+          <input
+            class="form-control mr-sm-2"
+            type="search"
+            placeholder="Search"
+            aria-label="Search"
+            name="q"
+            value="{{ request.GET.q|default_if_none:'' }}"
+            />
+            <button class="btn btn-outline-success my-2 my-sm-0" type="submit">
+              Search
+            </button>
+            <span class="ms-4 me-2"> Active Filters: </span>
+            <div class="form-control flex-grow-1">
+              {% for filter, color in filters.items %}
+              <button type="button" style="border-radius: 1rem; background-color: white; border: 2px solid {{ color }};">
+                {{ filter }}
+                <i class="fa-solid fa-xmark"></i>
+              </button>
+              {% endfor %}
+            </div>
+          </form>       
+        </div>
+  
+      <div class="m-4" id="accordion">
         {% for s in studies %}
-        <li>
-          <div>{{ s.text }}</div>
-        </li>
+        <div class="card">
+          <div class="card-header" id="heading{{ forloop.counter }}">
+            {{ s.title }} ({{s.authors_short}}, {{s.year}})
+            <button
+              class="btn"
+              data-toggle="collapse"
+              data-target="#collapse{{ forloop.counter }}"
+              aria-expanded="false"
+              aria-controls="collapse{{ forloop.counter }}"
+            >
+              <i class="fa-solid fa-caret-down"></i>
+            </button>
+          </div>
+          <div
+            id="collapse{{ forloop.counter }}"
+            class="collapse"
+            aria-labelledby="heading{{ forloop.counter }}"
+            data-parent="#accordion"
+          >
+            <div class="card-body">{{ s.abstract }}</div>
+          </div>
+        </div>
         {% endfor %}
-      </ul>
+      </div>
     </div>
+
     {% include 'psynamic/footer.html' %}
   </body>
 </html>

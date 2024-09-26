@@ -2,11 +2,14 @@ from bokeh.embed import components
 from bokeh.layouts import column, row
 from bokeh.models import (Column, ColumnDataSource, CustomJS, LabelSet,
                           TextInput, HoverTool)
-from bokeh.palettes import Category20c
+from bokeh.palettes import Greens256, Blues256
 from bokeh.plotting import figure
 from django.shortcuts import render
 from psynamic.models import Study
 import pandas as pd
+import math
+
+TITLE_SIZE = '16pt'
 
 
 def index(request):
@@ -14,7 +17,7 @@ def index(request):
     df = Study.get_prediction_df(['Condition', 'Substances'], [0.1, 0.1])
     pie_plot = create_pie_chart(df, 'Substances')
     bar_plot = create_bar_plot(df, 'Condition')
-    layout = row(pie_plot, bar_plot)
+    layout = row(pie_plot, bar_plot, sizing_mode='scale_width')
 
     script, div = components(layout)
 
@@ -22,6 +25,10 @@ def index(request):
         'studies': studies,
         'script': script,
         'div': div,
+        'filters':
+            {'Depression': '#107a37',
+             'Ketamine': '#08306b'
+             }
     }
     return render(request, "psynamic/index.html", context)
 
@@ -40,7 +47,9 @@ def create_pie_chart(df: pd.DataFrame, label_class_column: str):
     # Prepare data for Bokeh pie chart
     labels = label_counts.index.tolist()
     sizes = label_counts.values.tolist()
-    colors = Category20c[len(labels)]  # Use a color palette from Bokeh
+    # use Greens color palette from Bokeh
+    index_step = math.floor(256/len(labels))
+    colors = Blues256[::index_step][:len(labels)]
 
     # Prepare the data for the pie chart
     data = pd.DataFrame({
@@ -59,8 +68,10 @@ def create_pie_chart(df: pd.DataFrame, label_class_column: str):
     data['percentage'] = data['percentage'].apply(lambda x: f"{x:.1f}%")
 
     # Create a Bokeh figure
-    p = figure(height=350, toolbar_location=None,
+    p = figure(height=500, toolbar_location=None, title=label_class_column,
                tools="hover", tooltips="@label: @value", x_range=(-0.5, 1.0))
+    p.title.text_font_size = TITLE_SIZE
+
     p.wedge(x=0, y=1, radius=0.4,
             start_angle='start_angle', end_angle='end_angle',
             line_color="white", fill_color='color', legend_field='label',
@@ -86,13 +97,16 @@ def create_bar_plot(df: pd.DataFrame, x_column):
     # Prepare data for Bokeh bar plot
     labels = label_counts.index.tolist()
     sizes = label_counts.values.tolist()
-    colors = Category20c[len(labels)]  # Use a color palette from Bokeh
+    # get maximal difference in colours
+    index_step = math.floor(256/len(labels))
+    colors = Greens256[::index_step][:len(labels)]
 
     source = ColumnDataSource(
         data=dict(labels=labels, sizes=sizes, colors=colors))
 
-    p = figure(y_range=labels, height=350, title="Label Counts",
+    p = figure(y_range=labels, height=500, title=x_column,
                toolbar_location=None, tools="")
+    p.title.text_font_size = TITLE_SIZE
     p.hbar(y='labels', right='sizes', height=0.9,
            color='colors', source=source)
     p.ygrid.grid_line_color = None

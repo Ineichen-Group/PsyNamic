@@ -61,9 +61,9 @@
             "justMyCode": false,
             "args": [
                 "--mode", "pred",
-                "--load", "model/experiments/pubmedbert_condition_20240912/checkpoint-792",
+                "--load", "model/experiments/pubmedbert_substances_20240902/checkpoint-440",
                 "--data", "data/prepared_data/all/psychedelic_study_relevant.csv",
-                "--task", "Condition",
+                "--task", "Substances",
             ]
         }
     ]

@@ -45,13 +45,20 @@ class Prediction(models.Model):
 
 
 class Study(models.Model):
-    id = models.AutoField(primary_key=True)
-    # Title + Abstract as presented in prodigy
+    id = models.IntegerField(primary_key=True)
     text = models.TextField(default='')
     predictions = models.ManyToManyField(Prediction)
+    title = models.TextField(default='')
+    abstract = models.TextField(default='')
+    url = models.URLField(default='')
+    keywords = models.TextField(default='')
+    doi = models.CharField(max_length=200, default='')
+    year = models.IntegerField(default=0)
+    authors = models.TextField(default='')
+    
 
     def __str__(self):
-        return self.text
+        return f'{self.id}: {self.title}'
 
     def get_prediction(self, label_class: str, prob_threshold: float = 0.5) -> list[str]:
         # check if label_class exists
@@ -109,3 +116,23 @@ class Study(models.Model):
             data.append(data_instance)
 
         return pd.DataFrame(data)
+
+    @property
+    def authors_short(self):
+        #convert "['Kleeblatt, J.', 'Betzler, F.', 'Kilarski, L. L.', 'Bschor, T.', 'Köhler, S.']" --> Kleeblatt et al.
+        
+        authors = self.authors.strip('][').split(', ')
+        # strip ' & "
+        authors = [author.strip("'") for author in authors]
+        authors = [author.strip('"') for author in authors]
+        first_author = authors[0].split(',')[0]
+        if len(authors) > 2:
+            return f'{first_author} et al.'
+        elif len(authors) == 2:
+            second_author = authors[1].split(',')[0]
+            return f'{first_author} & {second_author}'
+        else:
+            return first_author
+        
+        
+        
