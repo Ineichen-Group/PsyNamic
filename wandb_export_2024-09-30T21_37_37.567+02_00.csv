@@ -1,0 +1,17 @@
+"Category","hex","F1-Score",Group
+"Relevant/Not Relevant","#3353b7","0.9327873265392336",Relevance Detection
+"Study Purpose","#ccd4ed","0.8130081300813008",Study Characteristics
+"Study Control","#ccd4ed","0.7872340425531915",Study Characteristics
+"Data Type","#ccd4ed","0.6882158909670871",Study Characteristics
+"Data Collection","#ccd4ed","0.9221494607087828",Study Characteristics
+"Number of Participants","#ccd4ed","0.8984956220250339",Study Characteristics
+"Sex of Participants","#ccd4ed","0.887741046831956",Study Characteristics
+"Age of Participants","#ccd4ed","0.9111111111111112",Study Characteristics
+"Substances","#e38252","0.9074074074074074",Substance(s)
+"Application Form","#e38252","0.9555555555555556",Substance(s)
+"Regimen","#e38252","0.6352941176470588",Substance(s)
+"Setting","#e38252","0.9130434782608696",Substance(s)
+"Substance Naivety","#e38252","0.8333333333333334",Substance(s)
+"Condition","#569d85","0.8648648648648649",Clinical Measure
+"Outcomes","#569d85","0.7299270072992701",Clinical Measure
+"Clinical Trial Phase","#569d85","0.5882352941176471",Clinical Measure
