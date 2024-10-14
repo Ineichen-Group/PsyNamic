@@ -1,13 +1,14 @@
+import math
+
+import pandas as pd
 from bokeh.embed import components
 from bokeh.layouts import column, row
-from bokeh.models import (Column, ColumnDataSource, CustomJS, LabelSet,
-                          TextInput, HoverTool)
-from bokeh.palettes import Greens256, Blues256
+from bokeh.models import (Column, ColumnDataSource, CustomJS, HoverTool,
+                          LabelSet, TapTool, TextInput)
+from bokeh.palettes import Blues256, Greens256
 from bokeh.plotting import figure
 from django.shortcuts import render
 from psynamic.models import Study
-import pandas as pd
-import math
 
 TITLE_SIZE = '16pt'
 
@@ -18,7 +19,10 @@ def index(request):
     pie_plot = create_pie_chart(df, 'Substances')
     bar_plot = create_bar_plot(df, 'Condition')
     layout = row(pie_plot, bar_plot, sizing_mode='scale_width')
-
+    #print(Study.get_most_frequent_condition_substance())
+    # print(Study.get_most_frequent_substance_for_condition('Post-traumatic stress disorder (PTSD)'))
+    print(Study.get_distribution('Substances'))
+    
     script, div = components(layout)
 
     context = {
@@ -38,71 +42,91 @@ def create_pie_chart(df: pd.DataFrame, label_class_column: str):
         raise ValueError(
             f"Column '{label_class_column}' not found in the DataFrame")
 
-    # Flatten the lists of strings in the specified column
     flat_labels = df[label_class_column].explode().dropna().tolist()
-
-    # Calculate counts of each label
     label_counts = pd.Series(flat_labels).value_counts()
 
-    # Prepare data for Bokeh pie chart
     labels = label_counts.index.tolist()
     sizes = label_counts.values.tolist()
-    # use Greens color palette from Bokeh
-    index_step = math.floor(256/len(labels))
+    index_step = math.floor(256 / len(labels))
     colors = Blues256[::index_step][:len(labels)]
 
-    # Prepare the data for the pie chart
     data = pd.DataFrame({
         'label': labels,
         'value': sizes,
         'color': colors,
     })
 
-    # Calculate angles for the wedges
     data['angle'] = data['value'] / data['value'].sum() * 2 * 3.14
     data['start_angle'] = data['angle'].cumsum().shift().fillna(0)
     data['end_angle'] = data['start_angle'] + data['angle']
-
-    # Add percentage labels on top of the wedges
     data['percentage'] = data['value'] / data['value'].sum() * 100
     data['percentage'] = data['percentage'].apply(lambda x: f"{x:.1f}%")
 
-    # Create a Bokeh figure
+    source = ColumnDataSource(data=data)
+
     p = figure(height=500, toolbar_location=None, title=label_class_column,
-               tools="hover", tooltips="@label: @value", x_range=(-0.5, 1.0))
+               tools="tap", x_range=(-0.5, 1.0))
     p.title.text_font_size = TITLE_SIZE
 
-    p.wedge(x=0, y=1, radius=0.4,
-            start_angle='start_angle', end_angle='end_angle',
-            line_color="white", fill_color='color', legend_field='label',
-            source=ColumnDataSource(data=data))
+    wedges = p.wedge(x=0, y=1, radius=0.4,
+                     start_angle='start_angle', end_angle='end_angle',
+                     line_color="white", fill_color='color', legend_field='label',
+                     source=source)
+    # add percentage outside the pie chart
+    labels = LabelSet(x=0.7, y=1, text='percentage', level='glyph',
+                        text_align='center', text_baseline='middle', source=source)
+    p.add_layout(labels)
+    
 
     p.axis.axis_label = None
     p.axis.visible = False
     p.grid.grid_line_color = None
+    # add percentage labels on hover
+   
+
+    # JavaScript callback to filter data
+    callback = CustomJS(args=dict(source=source), code="""
+        const selected_label = cb_obj.data['label'][cb_data.index['1d'].indices[0]];
+        const colors = source.data['color'];
+        for (let i = 0; i < colors.length; i++) {
+            colors[i] = (source.data['label'][i] === selected_label) ? source.data['color'][i] : 'lightgrey';
+        }
+        source.change.emit();
+
+        const bar_source = Bokeh.documents[0].get_model_by_name('bar_source');
+        const original_bar_data = bar_source.data;
+        const new_bar_data = {labels: [], sizes: [], colors: original_bar_data.colors};
+
+        for (let i = 0; i < original_bar_data.labels.length; i++) {
+            if (original_bar_data.labels[i].includes(selected_label)) {
+                new_bar_data.labels.push(original_bar_data.labels[i]);
+                new_bar_data.sizes.push(original_bar_data.sizes[i]);
+            }
+        }
+
+        bar_source.data = new_bar_data;
+        bar_source.change.emit();
+    """)
+
+    wedges.js_on_event('tap', callback)
 
     return p
 
 
 def create_bar_plot(df: pd.DataFrame, x_column):
-    """ Create frequency plot for a categorical column """
     if x_column not in df.columns:
         raise ValueError(f"Column '{x_column}' not found in the DataFrame")
 
-    # Flatten the lists of strings in the specified column
     flat_labels = df[x_column].explode().dropna().tolist()
-    # Calculate counts of each label
     label_counts = pd.Series(flat_labels).value_counts()
 
-    # Prepare data for Bokeh bar plot
     labels = label_counts.index.tolist()
     sizes = label_counts.values.tolist()
-    # get maximal difference in colours
-    index_step = math.floor(256/len(labels))
+    index_step = math.floor(256 / len(labels))
     colors = Greens256[::index_step][:len(labels)]
 
     source = ColumnDataSource(
-        data=dict(labels=labels, sizes=sizes, colors=colors))
+        data=dict(labels=labels, sizes=sizes, colors=colors), name='bar_source')
 
     p = figure(y_range=labels, height=500, title=x_column,
                toolbar_location=None, tools="")
