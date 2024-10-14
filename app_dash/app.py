@@ -4,33 +4,27 @@ from dash import html, dcc
 from pages.about import about_layout
 from pages.contact import contact_layout
 from pages.home import home_layout
-from components.layout import header_layout, footer_layout
-from pages.views.time import time_graph
+from pages.views.substance_condition import substance_condition_graphs
+from components.layout import header_layout, footer_layout, search_filter_component, studies_display
+from pages.views.time import time_graph, get_time_data
 from callbacks import register_callbacks
-import pandas as pd
+import warnings
 
-STUDIES = '/home/vera/Documents/Arbeit/CRS/PsychNER/app_dash/data/studies.csv'
-PREDICTION = '/home/vera/Documents/Arbeit/CRS/PsychNER/app_dash/data/prediction.csv'
+# Load data
+frequency_df = get_time_data()
 
-# from callbacks.callbacks import register_callbacks
-
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
+# Initialize the Dash app with suppress_callback_exceptions=True
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME], suppress_callback_exceptions=True)
 
 app.layout = html.Div([
     header_layout(),
     dcc.Location(id='url', refresh=False),
     html.Div(id='page-content', className='mx-5 my-2'),
+    # search_filter_component(),
+    # studies_display(),  
     footer_layout()
-],
-    )
+])
 
-
-df = pd.read_csv(STUDIES)
-# use year and id columns
-df = df[['id', 'year']]
-# count IDs per year, rename columns to Year and Frequency
-frequency_df = df.groupby('year').count().reset_index().rename(columns={'id': 'Frequency', 'year': 'Year'})
-print(frequency_df.head())
 @app.callback(dash.Output('page-content', 'children'),
               [dash.Input('url', 'pathname')])
 def display_page(pathname):
@@ -39,13 +33,14 @@ def display_page(pathname):
     elif pathname == '/contact':
         return contact_layout()
     elif pathname == '/view/time':
-        return time_graph(frequency_df)
+        return time_graph()
+    elif pathname == '/view/sub_cond':
+        return substance_condition_graphs()
     else:
         return home_layout()
 
-# Register all callbacks
-register_callbacks(app, frequency_df)
-
+# Register all callbacks and pass data
+register_callbacks(app, {'frequency_df': frequency_df})
 
 if __name__ == '__main__':
     app.run_server(debug=True)
