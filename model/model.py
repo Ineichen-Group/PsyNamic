@@ -8,12 +8,13 @@ from typing import Union, Literal
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 from confidenceinterval import classification_report_with_ci
 from datahandler import (MODEL_IDENTIFIER, DataHandler, DataHandlerBIO,
                          DataSplit, DataSplitBIO, SimpleDataset)
 from evaluate import load
 from sklearn.metrics import (accuracy_score, f1_score, precision_score,
-                             recall_score, roc_auc_score)
+                             recall_score)
 from torch.optim import AdamW
 from transformers import (AutoModelForSequenceClassification,
                           AutoModelForTokenClassification, AutoTokenizer,
@@ -42,13 +43,13 @@ os.environ['WANDB_PROJECT'] = "psynamic" # Used for logging to wandb
 ############################################################################################################
 # METRICS
 ############################################################################################################
-def singlelabel_metrics(labels: list[int], preds: list[int]) -> dict[str, float]:
+def singlelabel_metrics(true_labels: list[int], pred_labels: list[int]) -> dict[str, float]:
     """Compute metrics for binary classification tasks."""
-    accuracy = accuracy_score(labels, preds)
+    accuracy = accuracy_score(true_labels, pred_labels)
     precision = precision_score(
-        labels, preds, average='weighted', zero_division=0)
-    recall = recall_score(labels, preds, average='weighted')
-    f1 = f1_score(labels, preds, average='weighted')
+        true_labels, pred_labels, average='weighted', zero_division=0)
+    recall = recall_score(true_labels, pred_labels, average='weighted')
+    f1 = f1_score(true_labels, pred_labels, average='weighted')
     return {
         'accuracy': accuracy,
         'precision': precision,
@@ -57,13 +58,13 @@ def singlelabel_metrics(labels: list[int], preds: list[int]) -> dict[str, float]
     }
 
 
-def multilabel_metrics(labels: np.ndarray, preds: np.ndarray) -> dict[str, float]:
+def multilabel_metrics(true_labels: np.ndarray, pred_labels: np.ndarray) -> dict[str, float]:
     """Compute metrics for multilabel classification tasks."""
-    accuracy = accuracy_score(labels, preds)
+    accuracy = accuracy_score(true_labels, pred_labels)
     precision = precision_score(
-        labels, preds, average='weighted', zero_division=0)
-    recall = recall_score(labels, preds, average='weighted')
-    f1 = f1_score(labels, preds, average='weighted')
+        true_labels, pred_labels, average='weighted', zero_division=0)
+    recall = recall_score(true_labels, pred_labels, average='weighted')
+    f1 = f1_score(true_labels, pred_labels, average='weighted')
     return {
         'accuracy': accuracy,
         'precision': precision,
@@ -72,10 +73,10 @@ def multilabel_metrics(labels: np.ndarray, preds: np.ndarray) -> dict[str, float
     }
 
 
-def bio_metrics(labels: list[str], preds: list[str]) -> dict[str, float]:
+def bio_metrics(true_labels: list[str], pred_labels: list[str]) -> dict[str, float]:
     metric = load("seqeval")
     results = metric.compute(
-        predictions=preds, references=labels)
+        predictions=pred_labels, references=true_labels)
     final_results = {}
     final_results["overall_precision"] = results["overall_precision"]
     final_results["overall_recall"] = results["overall_recall"]
@@ -109,7 +110,7 @@ def compute_singlelabel_metrics(pred: PredictionOutput) -> dict[str, float]:
     return singlelabel_metrics(labels, preds)
 
 
-def compute_multilabel_metrics(pred: PredictionOutput, threshold: float = 0.1, average: Literal['micro', 'macro', 'samples', 'weighted'] = 'micro') -> dict[str, float]:
+def compute_multilabel_metrics(pred: PredictionOutput, threshold: float = 0.5, average: Literal['micro', 'macro', 'samples', 'weighted'] = 'micro') -> dict[str, float]:
     """Compute metrics for multilabel classification tasks, to be passed to the Trainer.
 
     Args:
@@ -131,11 +132,13 @@ def compute_multilabel_metrics(pred: PredictionOutput, threshold: float = 0.1, a
 
 def compute_bio_metrics(p: PredictionOutput, label_list: list[str]) -> dict[str, float]:
     """Compute metrics for NER tasks, to be passed to the Trainer.
+    
+        -100 is for special tokens such as [CLS], [SEP], [PAD], [MASK]
     """
     predictions, labels = p
     predictions = np.argmax(predictions, axis=2)
 
-    true_predictions = [
+    pred_labels = [
         [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
         for prediction, label in zip(predictions, labels)
     ]
@@ -143,8 +146,8 @@ def compute_bio_metrics(p: PredictionOutput, label_list: list[str]) -> dict[str,
         [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
         for prediction, label in zip(predictions, labels)
     ]
-
-    return bio_metrics(true_labels, true_predictions)
+    
+    return bio_metrics(true_labels, pred_labels)    
 
 ############################################################################################################
 # COMMAND LINE INTERFACE
@@ -358,104 +361,109 @@ def train(
     return trainer
 
 
-def predict(project_folder: str, trainer: Trainer, test_dataset: Union[DataSplit, DataSplitBIO], outfile: str = None) -> str:
-    """ Predicts the labels for the test dataset and saves the predictions to a CSV file.
+def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[DataSplit, DataSplitBIO], outfile: str = None, threshold: float=0.5) -> tuple[str, Union[str, None]]:
+    """ Predicts the labels for the test split or any other dataset and saves predictions and metrics to a file.
+        In case its only prediction and true labels are not provided, only the predictions will be saved.
 
     Args:
         project_folder (str): Path in which the checkpoints, params.json and predictions.csv will be saved.
         trainer (Trainer): Trainer object with the trained model.
         test_dataset (DataSplit): Test dataset to predict on.
         outfile (str, optional): Name of the output file. Defaults to predictions.csv in project_folder.
+        threshold (float, optional): Threshold for multilabel classification. Defaults to 0.1.
 
     Returns:
         str: outfile path
     """
-    # Get predictions
     predictions = trainer.predict(test_dataset)
-    logits = predictions.predictions
-
-    # Calculate probabilities using softmax
-    probabilities = np.exp(logits - np.max(logits, axis=-1, keepdims=True))
-    probabilities /= probabilities.sum(axis=-1, keepdims=True)
     
-    is_ner = type(test_dataset) == DataSplitBIO
     
-    # Prepare lists for DataFrame
-    data = []
-    for i, (id, text, label) in enumerate(test_dataset):
-        if test_dataset.is_multilabel:
-            # For multilabel classification
-            # Convert probabilities to binary predictions
-            prediction = (probabilities[i] > 0.5).astype(int).tolist()
-            # Save all probabilities for each label
-            probability = probabilities[i].tolist()
-            # Ensure label is also in binary format
-            label = literal_eval(label)
-        else:
-            # For single-label classification
-            prediction = np.argmax(logits[i])
-            probability = probabilities[i].tolist()
-            label = label
-
-        data.append({
+    # If the true labels are provided, compute metrics
+    try:
+        metrics = predictions.metrics
+    except:
+        metrics = None
+    report_df = None
+    
+    # Collect prediction, probability and true labels
+    pred_data = []
+    # Case 1: Multilabel classification
+    if test_dataset.is_multilabel:
+        probs = F.sigmoid(torch.Tensor(predictions.predictions))
+        true_labels = predictions.label_ids
+        pred_labels = np.zeros(probs.shape)
+        pred_labels[np.where(probs >= threshold)] = 1
+    
+    # Case 2: NER
+    elif type(test_dataset) == DataSplitBIO:
+        # Probs include special tokens and subwords
+        probs_incl_spec = F.softmax(torch.Tensor(predictions.predictions), dim=2)
+        pred_labels_idx = np.argmax(predictions.predictions, axis=2)
+        pred_labels = []
+        true_labels = []
+        probs = []
+        breakpoint()
+        for true_l, pred_l, prob in zip(predictions.label_ids, pred_labels_idx, probs_incl_spec):
+            if not (len(true_l) == len(pred_l) == len(prob)):
+                breakpoint()
+                raise ValueError('Lengths of predictions, true labels and probabilities do not match')
+            
+            sample_pred = []
+            sample_true = []
+            sample_prob = []
+            breakpoint()
+            for t, p, pr in zip(true_l, pred_l, prob):
+                if t != -100:
+                    sample_true.append(test_dataset.labels[t])
+                    sample_pred.append(test_dataset.labels[p])
+                    sample_prob.append(pr)
+            pred_labels.append(sample_pred)
+            true_labels.append(sample_true)
+            probs.append(sample_prob)
+            
+    # Case 3: Single-label classification
+    else:
+        true_labels = predictions.label_ids
+        probs = predictions.predictions
+        pred_labels = np.argmax(probs, axis=1)
+        
+        # Case 1: True labels are provided
+        if metrics:
+            report_df = classification_report_with_ci(
+                true_labels, pred_labels)
+    
+    # Write predictions to file 
+    for d, pred_labels, true_labels, prob in zip(test_dataset, pred_labels, true_labels, probs):
+        id, text, _ = d
+        # if not (len(pred_labels) == len(true_labels) == len(prob) == len(text)):
+        #     # raise ValueError('Lengths of predictions, true labels and probabilities do not match')
+        #     print(f'Lengths do not match; len(pred_labels): {len(pred_labels)}, len(true_labels): {len(true_labels)}, len(prob): {len(prob)}, len(text): {len(text)}')
+        pred_data.append({
             "id": id,
             "text": text,
-            "prediction": prediction,
-            "probability": probability,
-            "label": label
+            "prediction": pred_labels,
+            "probability": probs,
+            "label": true_labels
         })
 
-    # Create DataFrame
-    df = pd.DataFrame(data)
-
-    # Save DataFrame to CSV
-    filename = 'predictions.csv' if outfile is None else f'{outfile}_predictions.csv'
-    output_file = os.path.join(project_folder, filename)
-    df.to_csv(output_file, index=False)
-    return output_file
-
-
-def evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[DataSplit, DataSplitBIO], task: str) -> str:
-    output_file = predict(project_folder, trainer, test_dataset)
-    # Read in predictions
-    df = pd.read_csv(output_file)
-    # TODO: really hacky this whole literal_eval, should be dealt with nicer
-    if 'NER' not in task:
-        # convert string to list
-        df['label'] = df['label'].apply(literal_eval)
-        df['prediction'] = df['prediction'].apply(literal_eval)
-        
-    predictions = df['prediction'].tolist()
-    labels = df['label'].tolist()
-    if 'NER' in task:
-        predictions = [literal_eval(list_string) for list_string in predictions]
-        labels = [literal_eval(list_string) for list_string in labels]
-    report_df = None
-    # Compute classification report and save to CSV
-    if test_dataset.is_multilabel:
-        metrics = multilabel_metrics(labels, predictions)
-
+    df = pd.DataFrame(pred_data)
+    filename = 'test_predictions.csv' if outfile is None else f'{outfile}_predictions.csv'
+    pred_file = os.path.join(project_folder, filename)
+    df.to_csv(pred_file, index=False)
+    
+    # If true labels are provided and metrics are computed, write metrics to file
+    if metrics:
+        filename = 'test_eval.csv' if outfile is None else f'{outfile}_eval.csv'
+        eval_file = os.path.join(project_folder, filename)
+        # Write metrics to file 
+        with open(eval_file, 'w') as f:
+            json.dump(metrics, f)
+            if report_df is not None:
+                # append classification report to metrics.json
+                json.dump(report_df, f)
     else:
-        if 'NER' in task:
-            metrics = bio_metrics(labels, predictions)
-        else:
-            try:
-                report_df = classification_report_with_ci(labels, predictions,
-                                                          output_dict=True)
-            except Exception as e:
-                print('Error computing classification report for single-label task:', e)
-        metrics = singlelabel_metrics(labels, predictions)
-
-    output_file = open(os.path.join(project_folder, 'metrics.json'), 'w')
-    # write metrics and/or classification report to file
-    with output_file as f:
-        json.dump(metrics, f)
-
-        if report_df is not None:
-            # append classification report to metrics.json
-            json.dump(report_df, f)
-    return output_file
-
+        eval_file = None
+    return pred_file, eval_file
 
 ############################################################################################################
 # 4 MODES: train, cont_train, eval, pred
@@ -477,7 +485,7 @@ def finetune(args: argparse.Namespace) -> None:
     save_train_args(project_path, args, add_params)
     trainer = train(project_path, train_dataset,
                     args, val_dataset=val_dataset, is_multilabel=meta_data['Is_multilabel'])
-    evaluate(project_path, trainer, test_dataset, meta_data['Task'])
+    predict_evaluate(project_path, trainer, test_dataset)
 
 
 def cont_finetune(args: argparse.Namespace) -> None:
@@ -491,7 +499,7 @@ def cont_finetune(args: argparse.Namespace) -> None:
         args.data, meta_file, args.model)
     trainer = train(args.load, train_dataset,
                     args, resume_from_checkpoint=True, is_multilabel=meta_data['Is_multilabel'], task=meta_data['Task'])
-    evaluate(args.load, trainer, test_dataset, meta_data['Task'])
+    predict_evaluate(args.load, trainer, test_dataset)
 
 
 def load_and_evaluate(args: argparse.Namespace) -> str:
@@ -507,7 +515,8 @@ def load_and_evaluate(args: argparse.Namespace) -> str:
 
     test_dataset = load_data(
         args.data, data_meta_file, args.model)[1]
-    evaluate(exp_path, trainer, test_dataset, args.task)
+    
+    predict_evaluate(exp_path, trainer, test_dataset, args.task)
 
 
 def load_and_predict(args: argparse.Namespace) -> None:
@@ -529,7 +538,7 @@ def load_and_predict(args: argparse.Namespace) -> None:
         dataset = load_data(
             args.data, data_meta_file, args.model)[1]
         outfile_name = f'{os.path.basename(args.load)}_test_split'
-        outfile = predict(exp_path, trainer, dataset, outfile_name)
+        outfile = predict_evaluate(exp_path, trainer, dataset, outfile_name)
     else:
         if os.path.isfile(args.data):
             data = args.data
@@ -541,7 +550,7 @@ def load_and_predict(args: argparse.Namespace) -> None:
         dataset = SimpleDataset(
             data, tokenizer, max_length, args.is_multilabel)
         outfile_name = f'{os.path.basename(args.load)}_{os.path.basename(data).split(".")[0]}'
-        outfile = predict(exp_path, trainer, dataset, outfile_name)
+        outfile = predict_evaluate(exp_path, trainer, dataset, outfile_name)
     return outfile
 
 

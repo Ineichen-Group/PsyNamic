@@ -226,29 +226,14 @@ class DataSplitBIO(DataSplit):
         )
         # print tokens created by tokenizer
         bert_tokens = self.tokenizer.convert_ids_to_tokens(
-            encoding['input_ids'].squeeze(0))
-
-        # Align labels with BERT tokens
+            encoding['input_ids'].squeeze(0))        
         labels = [self.label2id[tag] for tag in ner_tags]
-        label_ids = [-100] * self.max_len
-
-        # Each token is assigned an id: if token is split into multiple subtokens, all subtokens get the same id
         word_ids = encoding.word_ids(batch_index=0)
-        previous_word_idx = None
-        for i, word_idx in enumerate(word_ids):
-            if word_idx is None:
-                # -100 as a dummy label for padding tokens or ignored subtokens
-                label_ids[i] = -100
-            elif word_idx != previous_word_idx:  # Label only the first subtoken to avoid redundant labels for word pieces
-                label_ids[i] = labels[word_idx]
-            previous_word_idx = word_idx
-
-        # Add the labels to the encoding
-        encoding["labels"] = torch.tensor(label_ids)
+        aligned_labels = self.align_labels_with_tokens(labels, word_ids)
+        encoding["labels"] = torch.tensor(aligned_labels, dtype=torch.long)
 
         # Convert tensor dimensions from (1, max_len) to (max_len)
         return {key: val.squeeze(0) for key, val in encoding.items()}
-
     
     def __next__(self):
         if self._index < len(self.df):
@@ -264,7 +249,30 @@ class DataSplitBIO(DataSplit):
     def labels(self) -> list[str]:
         return list(self.label2id.keys())
 
-
+    def align_labels_with_tokens(self, labels, word_ids) -> list[int]:
+        new_labels = []
+        current_word = None
+        for word_id in word_ids:
+            if word_id != current_word:
+                # Start of a new word!
+                current_word = word_id
+                label = -100 if word_id is None else labels[word_id]
+                new_labels.append(label)
+            elif word_id is None:
+                # Special token
+                new_labels.append(-100)
+            else:
+                # Same word as previous token
+                label = labels[word_id]
+                # If the label is B-XXX we change it to I-XXX
+                if label % 2 == 1:
+                    label += 1
+                new_labels.append(label)
+        
+        # Ensure the labels are the same length as max_len
+        new_labels = new_labels + [-100] * (self.max_len - len(new_labels))
+        return new_labels[:self.max_len]
+    
 class DataHandlerBIO():
     TOKEN_COL = 'tokens'
     NER_COL = 'ner_tags'
