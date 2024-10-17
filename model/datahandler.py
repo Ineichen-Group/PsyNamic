@@ -200,6 +200,7 @@ class DataSplitBIO(DataSplit):
         self.df = split
         self.max_len = max_len
         self.label2id = label2id
+        self.id2label = {int(v): k for k, v in self.label2id.items()}
         self.tokenizer = tokenizer
         self.is_multilabel = False
 
@@ -223,15 +224,20 @@ class DataSplitBIO(DataSplit):
             max_length=self.max_len,
             is_split_into_words=True,
             return_tensors='pt'
-        )
-        # print tokens created by tokenizer
-        bert_tokens = self.tokenizer.convert_ids_to_tokens(
-            encoding['input_ids'].squeeze(0))        
-        labels = [self.label2id[tag] for tag in ner_tags]
+        )      
+        labels_ids = [self.label2id[tag] for tag in ner_tags]
+        
+        # Align labels to bert tokens
         word_ids = encoding.word_ids(batch_index=0)
-        aligned_labels = self.align_labels_with_tokens(labels, word_ids)
+        bert_tokens = self.tokenizer.convert_ids_to_tokens(
+            encoding['input_ids'].squeeze(0))
+        aligned_labels = self.align_labels_with_tokens(labels_ids, word_ids)
         encoding["labels"] = torch.tensor(aligned_labels, dtype=torch.long)
 
+        # Update to bert tokens and labels
+        self.df.at[idx, self.TOKEN_COL] = bert_tokens
+        self.df.at[idx, self.NER_COL] = aligned_labels
+        
         # Convert tensor dimensions from (1, max_len) to (max_len)
         return {key: val.squeeze(0) for key, val in encoding.items()}
     
@@ -253,22 +259,23 @@ class DataSplitBIO(DataSplit):
         new_labels = []
         current_word = None
         for word_id in word_ids:
+            # new word has started
             if word_id != current_word:
                 # Start of a new word!
                 current_word = word_id
                 label = -100 if word_id is None else labels[word_id]
                 new_labels.append(label)
+            # Special token
             elif word_id is None:
-                # Special token
                 new_labels.append(-100)
+            # Same word as previous token
             else:
-                # Same word as previous token
                 label = labels[word_id]
-                # If the label is B-XXX we change it to I-XXX
-                if label % 2 == 1:
-                    label += 1
-                new_labels.append(label)
-        
+                label_string = self.id2label[label]
+                if label_string.startswith('B-'):
+                    new_labels.append(self.label2id['I-' + label_string[2:]])
+                else:
+                    new_labels.append(label)
         # Ensure the labels are the same length as max_len
         new_labels = new_labels + [-100] * (self.max_len - len(new_labels))
         return new_labels[:self.max_len]

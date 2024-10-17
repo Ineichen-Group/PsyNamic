@@ -387,64 +387,58 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
     
     # Collect prediction, probability and true labels
     pred_data = []
-    # Case 1: Multilabel classification
-    if test_dataset.is_multilabel:
-        probs = F.sigmoid(torch.Tensor(predictions.predictions))
-        true_labels = predictions.label_ids
-        pred_labels = np.zeros(probs.shape)
-        pred_labels[np.where(probs >= threshold)] = 1
     
-    # Case 2: NER
-    elif type(test_dataset) == DataSplitBIO:
-        # Probs include special tokens and subwords
+    # NER --> token level classifciation
+    if type(test_dataset) == DataSplitBIO:
         probs_incl_spec = F.softmax(torch.Tensor(predictions.predictions), dim=2)
         pred_labels_idx = np.argmax(predictions.predictions, axis=2)
-        pred_labels = []
-        true_labels = []
-        probs = []
-        breakpoint()
-        for true_l, pred_l, prob in zip(predictions.label_ids, pred_labels_idx, probs_incl_spec):
-            if not (len(true_l) == len(pred_l) == len(prob)):
-                breakpoint()
+
+        # iterate over samples
+        for true_l, pred_l, prob, data in zip(predictions.label_ids, pred_labels_idx, probs_incl_spec, test_dataset):
+            id, tokens, _ = data
+            if not (len(true_l) == len(pred_l) == len(prob) == len(tokens)):
                 raise ValueError('Lengths of predictions, true labels and probabilities do not match')
-            
-            sample_pred = []
-            sample_true = []
-            sample_prob = []
-            breakpoint()
-            for t, p, pr in zip(true_l, pred_l, prob):
+            # iterate over tokens
+            for t, p, pr, token in zip(true_l, pred_l, prob, tokens):
                 if t != -100:
-                    sample_true.append(test_dataset.labels[t])
-                    sample_pred.append(test_dataset.labels[p])
-                    sample_prob.append(pr)
-            pred_labels.append(sample_pred)
-            true_labels.append(sample_true)
-            probs.append(sample_prob)
+                    pred_data.append({
+                        "id": id,
+                        "token": token,
+                        "prediction": test_dataset.labels[p],
+                        "probability": pr.tolist(),
+                        "label": test_dataset.labels[t]
+                    }) 
             
-    # Case 3: Single-label classification
+    # Abstract classification
     else:
-        true_labels = predictions.label_ids
-        probs = predictions.predictions
-        pred_labels = np.argmax(probs, axis=1)
-        
-        # Case 1: True labels are provided
-        if metrics:
-            report_df = classification_report_with_ci(
-                true_labels, pred_labels)
+        # Case 1: Multilabel classification
+        if test_dataset.is_multilabel:
+            probs = F.sigmoid(torch.Tensor(predictions.predictions))
+            true_labels = predictions.label_ids
+            pred_labels = np.zeros(probs.shape)
+            pred_labels[np.where(probs >= threshold)] = 1
+ 
+        # Case 2: Single-label classification
+        else:
+            true_labels = predictions.label_ids
+            probs = predictions.predictions
+            pred_labels = np.argmax(probs, axis=1)
+            
+            # Case 1: True labels are provided
+            if metrics:
+                report_df = classification_report_with_ci(
+                    true_labels, pred_labels)
     
-    # Write predictions to file 
-    for d, pred_labels, true_labels, prob in zip(test_dataset, pred_labels, true_labels, probs):
-        id, text, _ = d
-        # if not (len(pred_labels) == len(true_labels) == len(prob) == len(text)):
-        #     # raise ValueError('Lengths of predictions, true labels and probabilities do not match')
-        #     print(f'Lengths do not match; len(pred_labels): {len(pred_labels)}, len(true_labels): {len(true_labels)}, len(prob): {len(prob)}, len(text): {len(text)}')
-        pred_data.append({
-            "id": id,
-            "text": text,
-            "prediction": pred_labels,
-            "probability": probs,
-            "label": true_labels
-        })
+        # Write predictions to file 
+        for d, pred_labels, true_labels, prob in zip(test_dataset, pred_labels, true_labels, probs):
+            id, text, _ = d
+            pred_data.append({
+                "id": id,
+                "text": text,
+                "prediction": pred_labels,
+                "probability": probs,
+                "label": true_labels
+            })
 
     df = pd.DataFrame(pred_data)
     filename = 'test_predictions.csv' if outfile is None else f'{outfile}_predictions.csv'
