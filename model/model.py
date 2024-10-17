@@ -453,8 +453,10 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
         with open(eval_file, 'w') as f:
             json.dump(metrics, f)
             if report_df is not None:
-                # append classification report to metrics.json
-                json.dump(report_df, f)
+                # append classification report dataframe to metrics.json, convert to dict
+                report_dict = report_df.to_dict()
+                json.dump(report_dict, f)
+                
     else:
         eval_file = None
     return pred_file, eval_file
