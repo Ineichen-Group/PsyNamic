@@ -1,0 +1,16 @@
+{
+    "Task": "NER Mini",
+    "Date": "20240822",
+    "Int_to_label": {
+        "0": "O",
+        "1": "I-Dosage",
+        "2": "I-Application area",
+        "3": "B-Dosage",
+        "4": "B-Application area"
+    },
+    "Train_size": 10,
+    "Use_val": true,
+    "Test_size": 5,
+    "Val_size": 5,
+    "Is_multilabel": false
+}

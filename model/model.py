@@ -1,71 +1,49 @@
 import argparse
 import json
 import os
-from abc import ABC, abstractmethod
 from ast import literal_eval
 from datetime import datetime
-from typing import Union
+from typing import Union, Literal
 
 import numpy as np
 import pandas as pd
 import torch
 from confidenceinterval import classification_report_with_ci
 from datahandler import (MODEL_IDENTIFIER, DataHandler, DataHandlerBIO,
-                         DataSplit, DataSplitBIO, PsychNamicRelevant,
-                         PsyNamicSingleLabel, SimpleDataset)
-from datasets import Dataset
+                         DataSplit, DataSplitBIO, SimpleDataset)
 from evaluate import load
 from sklearn.metrics import (accuracy_score, f1_score, precision_score,
                              recall_score, roc_auc_score)
 from torch.optim import AdamW
-from torch.utils.data import DataLoader
 from transformers import (AutoModelForSequenceClassification,
                           AutoModelForTokenClassification, AutoTokenizer,
                           BertForSequenceClassification,
-                          BertForTokenClassification, BertTokenizer,
+                          BertForTokenClassification,
                           EarlyStoppingCallback, Trainer, TrainingArguments,
                           get_linear_schedule_with_warmup)
+from transformers.trainer_utils import PredictionOutput
 
+############################################################################################################
+# REFERENCES
 # rf. https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/BERT/Fine_tuning_BERT_(and_friends)_for_multi_label_text_classification.ipynb#scrollTo=797b2WHJqUgZ for multilabel tuning
-
-
-EXPERIMENT_PATH = './model/experiments'
-DATA_PATH = './data/prepared_data'
-
-
-os.environ['WANDB_PROJECT'] = "psynamic"
-
+############################################################################################################
 # TODO: Enable cross validation
 # TODO: Hyperparameter tune
+# TODO: Improve predicting whatever file (single label or multilabel)
 
 
-class CustomTrainer:
-
-    def __innit__(self, arg: argparse.Namespace):
-        pass
-
-    @abstractmethod
-    def train(self):
-        pass
-
-    @abstractmethod
-    def save_model(self):
-        pass
-
-    @abstractmethod
-    def load_model(self):
-        pass
+############################################################################################################
+# some globals to set
+EXPERIMENT_PATH = './model/experiments'
+os.environ['WANDB_PROJECT'] = "psynamic" # Used for logging to wandb
+############################################################################################################
 
 
-class BertTrainer(CustomTrainer):
-
-    pass
-
-
-def compute_binary_metrics(pred):
-    """Compute binary classification metrics"""
-    labels = pred.label_ids
-    preds = pred.predictions.argmax(-1)
+############################################################################################################
+# METRICS
+############################################################################################################
+def singlelabel_metrics(labels: list[int], preds: list[int]) -> dict[str, float]:
+    """Compute metrics for binary classification tasks."""
     accuracy = accuracy_score(labels, preds)
     precision = precision_score(
         labels, preds, average='weighted', zero_division=0)
@@ -79,45 +57,26 @@ def compute_binary_metrics(pred):
     }
 
 
-def compute_multilabel_metrics(pred, threshold=0.5, average='micro'):
-    """Compute multilabel classification metrics"""
-    sigmoid = torch.nn.Sigmoid()
-    probs = sigmoid(torch.Tensor(pred.predictions))
-    labels = pred.label_ids
-    y_pred = np.zeros(probs.shape)
-    y_pred[np.where(probs >= threshold)] = 1
-
-    metrics = {
-        'f1': f1_score(y_true=labels, y_pred=y_pred, average=average),
-        'roc_auc': roc_auc_score(labels, y_pred, average=average),
-        'accuracy': accuracy_score(labels, y_pred),
-        'precision': precision_score(labels, y_pred, average=average),
-        'recall': recall_score(labels, y_pred, average=average),
+def multilabel_metrics(labels: np.ndarray, preds: np.ndarray) -> dict[str, float]:
+    """Compute metrics for multilabel classification tasks."""
+    accuracy = accuracy_score(labels, preds)
+    precision = precision_score(
+        labels, preds, average='weighted', zero_division=0)
+    recall = recall_score(labels, preds, average='weighted')
+    f1 = f1_score(labels, preds, average='weighted')
+    return {
+        'accuracy': accuracy,
+        'precision': precision,
+        'recall': recall,
+        'f1': f1
     }
 
-    return metrics
 
-
-def compute_bio_metrics(p, label_list):
-    """Compute metrics for NER tasks"""
+def bio_metrics(labels: list[str], preds: list[str]) -> dict[str, float]:
     metric = load("seqeval")
-
-    predictions, labels = p
-    predictions = np.argmax(predictions, axis=2)
-
-    true_predictions = [
-        [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
-    true_labels = [
-        [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
-        for prediction, label in zip(predictions, labels)
-    ]
-
     results = metric.compute(
-        predictions=true_predictions, references=true_labels)
+        predictions=preds, references=labels)
     final_results = {}
-
     final_results["overall_precision"] = results["overall_precision"]
     final_results["overall_recall"] = results["overall_recall"]
     final_results["overall_f1"] = results["overall_f1"]
@@ -143,17 +102,66 @@ def compute_bio_metrics(p, label_list):
     return final_results
 
 
+def compute_singlelabel_metrics(pred: PredictionOutput) -> dict[str, float]:
+    """Metric for binary classification, to be passed to the Trainer"""
+    labels = pred.label_ids
+    preds = pred.predictions.argmax(-1)
+    return singlelabel_metrics(labels, preds)
+
+
+def compute_multilabel_metrics(pred: PredictionOutput, threshold: float = 0.1, average: Literal['micro', 'macro', 'samples', 'weighted'] = 'micro') -> dict[str, float]:
+    """Compute metrics for multilabel classification tasks, to be passed to the Trainer.
+
+    Args:
+        pred (PredictionOutput): PredictionOutput object from the Trainer
+        threshold (float, optional): Threshold for prediction probabilities. Defaults to 0.1. VERY IMPORTANT!
+        average (Literal['micro', 'macro', 'samples', 'weighted'], optional): 
+            Average type for metrics. Defaults to 'micro'.
+            # s. https://scikit-learn.org/1.5/modules/generated/sklearn.metrics.f1_score.html for more information
+    """
+
+    sigmoid = torch.nn.Sigmoid()
+    probs = sigmoid(torch.Tensor(pred.predictions))
+    labels = pred.label_ids
+    y_pred = np.zeros(probs.shape)
+    y_pred[np.where(probs >= threshold)] = 1
+
+    return multilabel_metrics(labels, y_pred)
+
+
+def compute_bio_metrics(p: PredictionOutput, label_list: list[str]) -> dict[str, float]:
+    """Compute metrics for NER tasks, to be passed to the Trainer.
+    """
+    predictions, labels = p
+    predictions = np.argmax(predictions, axis=2)
+
+    true_predictions = [
+        [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
+        for prediction, label in zip(predictions, labels)
+    ]
+    true_labels = [
+        [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
+        for prediction, label in zip(predictions, labels)
+    ]
+
+    return bio_metrics(true_labels, true_predictions)
+
+############################################################################################################
+# COMMAND LINE INTERFACE
+############################################################################################################
 def init_argparse():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--mode', type=str,
                         choices=['train', 'cont_train', 'eval', 'pred'], default='train')
     parser.add_argument('--data', type=str)
+    # If NER, the task name should include 'NER'
     parser.add_argument('--task', type=str)
 
     # TRAIN:
     # General
     parser.add_argument('--model', type=str)
+    # TODO: Implement cross validation
     parser.add_argument('--cross_val', type=bool, default=False)
 
     # Hyperparameters
@@ -175,8 +183,11 @@ def init_argparse():
     return parser.parse_args()
 
 
+############################################################################################################
+# ALL SORTS OF HELPER FUNCTIONS
+############################################################################################################
 def save_train_args(project_dir: str, args: argparse.Namespace, add_params: dict = None) -> None:
-    # Write the training arguments to a json
+    """ Helper function to save training arguments to a json file."""
     args = vars(args)
     if add_params is not None:
         args.update(add_params)
@@ -184,7 +195,27 @@ def save_train_args(project_dir: str, args: argparse.Namespace, add_params: dict
         json.dump(args, f)
 
 
+def set_args_from_file(args: argparse.Namespace) -> argparse.Namespace:
+    """Set arguments from a params.json file in the experiment folder."""
+    params_json = os.path.join(os.path.dirname(args.load), 'params.json')
+    with open(params_json, 'r') as f:
+        params = json.load(f)
+
+    ignore = ['mode', 'load']
+    if args.data is not None:
+        ignore.append('data')
+
+    for key, value in params.items():
+        if key not in ignore:
+            setattr(args, key, value)
+
+    return args
+
+
 def init_directories(model: str, task: str) -> str:
+    """ Helper function to initialize directory for the experiment. --> make sure to set EXPERIMENT_PATH
+        The directory will be names: {model}_{task}_{date}
+    """
     date = datetime.now().strftime("%Y%m%d")
     lower_case_task = task.lower().replace(' ', '_')
     experiment_path = f'{model}_{lower_case_task}_{date}'
@@ -193,21 +224,46 @@ def init_directories(model: str, task: str) -> str:
     return project_dir
 
 
-def load_data(data: str, meta_file: str, model: str) -> tuple[DataSplit, DataSplit, DataSplit]:
+def load_model(args: argparse.Namespace) -> Trainer:
+    """Load a model from a given path and return a Trainer object."""
+    device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
+    if 'NER' in args.task:
+        model = AutoModelForTokenClassification.from_pretrained(
+            args.load).to(device)
+    else:
+        model = AutoModelForSequenceClassification.from_pretrained(
+            args.load).to(device)
+    tokenizer = AutoTokenizer.from_pretrained(args.load)
+    trainer = Trainer(
+        model=model,
+        compute_metrics=compute_multilabel_metrics,
+        tokenizer=tokenizer)
+    return trainer
+
+
+def load_data(data_dir: str, meta_file: str, model_identifier: str) -> tuple[DataSplit, DataSplit, DataSplit]:
+    """ Helper function to load data splits which were previously created by the DataHandler.
+        The data_dir is expected to contain the following:
+        - meta.json
+        - test.csv
+        - train.csv
+        (- val.csv) if validation split was used
+        all csv are expected to have an 'id', 'text' and 'label' column.
+
+    """
     # open meta file
     meta_data = json.load(open(meta_file, 'r'))
-
-    if meta_data['Task'] == 'NER':
-        datahandler = DataHandlerBIO(data, model=model)
-        use_val = datahandler.load_splits(data)
+    if 'NER' in meta_data['Task']:
+        datahandler = DataHandlerBIO(data_dir, model=model_identifier)
+        use_val = datahandler.load_splits(data_dir)
 
         train_dataset, test_dataset, eval_dataset = datahandler.get_split()
 
     else:
         datahandler = DataHandler(
-            data_path=data, model=model, meta_file=meta_file)
+            data_path=data_dir, model=model_identifier, meta_file=meta_file)
         # TODO: clean up usage of use_val
-        use_val = datahandler.load_splits(data)
+        use_val = datahandler.load_splits(data_dir)
         train_dataset, test_dataset, eval_dataset = datahandler.get_strat_split(
             use_val=use_val)
 
@@ -221,12 +277,12 @@ def train(
     val_dataset: Union[DataSplit, DataSplitBIO] = None,
     resume_from_checkpoint: bool = False,
     is_multilabel: bool = False,
-    task: str = '',
 ) -> Trainer:
     device_name = args.device if torch.cuda.is_available() else 'cpu'
     device = torch.device(device_name)
     problem_type = "single_label_classification" if not is_multilabel else "multi_label_classification"
 
+    # Load checkpoint or initialize model
     if resume_from_checkpoint:
         tokenizer = AutoTokenizer.from_pretrained(args.load)
         if 'NER' in args.task:
@@ -271,8 +327,7 @@ def train(
         num_training_steps=total_steps
     )
 
-    # Define compute metrics function
-
+    # Chose metrics based on task
     if 'NER' in args.task:
         label_list = train_dataset.labels
         def metrics(p): return compute_bio_metrics(
@@ -280,7 +335,7 @@ def train(
     elif is_multilabel:
         metrics = compute_multilabel_metrics
     else:
-        metrics = compute_binary_metrics
+        metrics = compute_singlelabel_metrics
 
     # Initialize the Trainer
     trainer = Trainer(
@@ -303,16 +358,28 @@ def train(
     return trainer
 
 
-def predict(project_folder: str, trainer: Trainer, test_dataset: DataSplit, outfile = None) -> str:
+def predict(project_folder: str, trainer: Trainer, test_dataset: Union[DataSplit, DataSplitBIO], outfile: str = None) -> str:
+    """ Predicts the labels for the test dataset and saves the predictions to a CSV file.
+
+    Args:
+        project_folder (str): Path in which the checkpoints, params.json and predictions.csv will be saved.
+        trainer (Trainer): Trainer object with the trained model.
+        test_dataset (DataSplit): Test dataset to predict on.
+        outfile (str, optional): Name of the output file. Defaults to predictions.csv in project_folder.
+
+    Returns:
+        str: outfile path
+    """
     # Get predictions
     predictions = trainer.predict(test_dataset)
-    labels = predictions.label_ids
     logits = predictions.predictions
 
     # Calculate probabilities using softmax
     probabilities = np.exp(logits - np.max(logits, axis=-1, keepdims=True))
     probabilities /= probabilities.sum(axis=-1, keepdims=True)
-
+    
+    is_ner = type(test_dataset) == DataSplitBIO
+    
     # Prepare lists for DataFrame
     data = []
     for i, (id, text, label) in enumerate(test_dataset):
@@ -348,62 +415,55 @@ def predict(project_folder: str, trainer: Trainer, test_dataset: DataSplit, outf
     return output_file
 
 
-#TODO: Fix evaluate
-def evaluate(project_folder: str, trainer: Trainer, test_dataset: DataSplit) -> str:
+def evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[DataSplit, DataSplitBIO], task: str) -> str:
     output_file = predict(project_folder, trainer, test_dataset)
+    # Read in predictions
+    df = pd.read_csv(output_file)
+    # TODO: really hacky this whole literal_eval, should be dealt with nicer
+    if 'NER' not in task:
+        # convert string to list
+        df['label'] = df['label'].apply(literal_eval)
+        df['prediction'] = df['prediction'].apply(literal_eval)
+        
+    predictions = df['prediction'].tolist()
+    labels = df['label'].tolist()
+    if 'NER' in task:
+        predictions = [literal_eval(list_string) for list_string in predictions]
+        labels = [literal_eval(list_string) for list_string in labels]
+    report_df = None
     # Compute classification report and save to CSV
     if test_dataset.is_multilabel:
-        try:
-            report_df = classification_report(labels, (probabilities > 0.5).astype(
-                int), target_names=None, zero_division=0, output_dict=True)
-            report_file = os.path.join(
-                project_folder, 'classification_report.csv')
-            pd.DataFrame(report_df).transpose().to_csv(report_file)
-        except Exception as e:
-            print('Error computing classification report for multilabel task:', e)
-    else:
-        try:
-            report_df = classification_report(
-                labels, np.argmax(logits, axis=1), output_dict=True)
-            report_file = os.path.join(
-                project_folder, 'classification_report.csv')
-            pd.DataFrame(report_df).transpose().to_csv(report_file)
-        except Exception as e:
-            print('Error computing classification report for single-label task:', e)
+        metrics = multilabel_metrics(labels, predictions)
 
+    else:
+        if 'NER' in task:
+            metrics = bio_metrics(labels, predictions)
+        else:
+            try:
+                report_df = classification_report_with_ci(labels, predictions,
+                                                          output_dict=True)
+            except Exception as e:
+                print('Error computing classification report for single-label task:', e)
+        metrics = singlelabel_metrics(labels, predictions)
+
+    output_file = open(os.path.join(project_folder, 'metrics.json'), 'w')
+    # write metrics and/or classification report to file
+    with output_file as f:
+        json.dump(metrics, f)
+
+        if report_df is not None:
+            # append classification report to metrics.json
+            json.dump(report_df, f)
     return output_file
 
 
-def set_args_from_file(args: argparse.Namespace) -> argparse.Namespace:
-    params_json = os.path.join(os.path.dirname(args.load), 'params.json')
-    with open(params_json, 'r') as f:
-        params = json.load(f)
-
-    ignore = ['mode', 'load']
-    if args.data is not None:
-        ignore.append('data')
-
-    for key, value in params.items():
-        if key not in ignore:
-            setattr(args, key, value)
-
-    return args
-
-
-def load_model(args: argparse.Namespace) -> Trainer:
-    device = torch.device(args.device if torch.cuda.is_available() else 'cpu')
-    model = AutoModelForSequenceClassification.from_pretrained(
-        args.load).to(device)
-    tokenizer = AutoTokenizer.from_pretrained(args.load)
-    trainer = Trainer(
-        model=model,
-        compute_metrics=compute_multilabel_metrics,
-        tokenizer=tokenizer)
-    return trainer
-
-
-# MODE = 'train' e.g. python model/model.py --model pubmedbert --data data/prepared_data/asreview_dataset_all --task 'Relevant Sample'
+############################################################################################################
+# 4 MODES: train, cont_train, eval, pred
+############################################################################################################
 def finetune(args: argparse.Namespace) -> None:
+    """ Finetune a pretrained BERT model on a given dataset, where the splits were created by the DataHandler.
+        Example call for MODE='train' e.g. python model/model.py --model pubmedbert --data data/prepared_data/asreview_dataset_all --task 'Relevant Sample'
+    """
     project_path = init_directories(args.model, args.task)
     meta_file = os.path.join(args.data, 'meta.json')
     meta_data = json.load(open(meta_file, 'r'))
@@ -412,17 +472,18 @@ def finetune(args: argparse.Namespace) -> None:
         args.data, meta_file, args.model)
     add_params = {
         'max_length': train_dataset.max_len,
-        'is_multilabel': meta_data['is_multilabel'],
+        'is_multilabel': meta_data['Is_multilabel'],
     }
     save_train_args(project_path, args, add_params)
     trainer = train(project_path, train_dataset,
-                    args, val_dataset=val_dataset, is_multilabel=meta_data['Is_multilabel'], task=meta_data['Task'])
+                    args, val_dataset=val_dataset, is_multilabel=meta_data['Is_multilabel'])
+    evaluate(project_path, trainer, test_dataset, meta_data['Task'])
 
-    evaluate(project_path, trainer, test_dataset)
 
-
-#  MODE = 'cont_train', e.g. python model/model.py --mode cont_train --load model/experiments/pubmedbert_relevant_sample_20240730/checkpoint-565
 def cont_finetune(args: argparse.Namespace) -> None:
+    """ Continue training a model from a given path.
+        Example call for MODE='cont_train', e.g. python model/model.py --mode cont_train --load model/experiments/pubmedbert_relevant_sample_20240730/checkpoint-565
+    """
     args = set_args_from_file(args)
     meta_file = os.path.join(args.data, 'meta.json')
     meta_data = json.load(open(meta_file, 'r'))
@@ -430,61 +491,55 @@ def cont_finetune(args: argparse.Namespace) -> None:
         args.data, meta_file, args.model)
     trainer = train(args.load, train_dataset,
                     args, resume_from_checkpoint=True, is_multilabel=meta_data['Is_multilabel'], task=meta_data['Task'])
-    evaluate(args.load, trainer, test_dataset)
-
-# TODO: Enable eval for NER
-# MODE = 'eval', e.g. python model/model.py --mode eval --load model/experiments/pubmedbert_relevant_sample_20240730/checkpoint-565
+    evaluate(args.load, trainer, test_dataset, meta_data['Task'])
 
 
-def load_and_evaluate(args: argparse.Namespace) -> None:
+def load_and_evaluate(args: argparse.Namespace) -> str:
+    """ Load a model from a given path and evaluate it on a test dataset. 
+        Example call for MODE='eval', e.g. python model/model.py --mode eval --load model/experiments/pubmedbert_relevant_sample_20240730/checkpoint-565
+    """
     # Load model from path
     args = set_args_from_file(args)
     trainer = load_model(args)
 
     exp_path = os.path.dirname(args.load)
     data_meta_file = os.path.join(args.data, 'meta.json')
-    train_meta_file = os.path.join(exp_path, 'params.json')
-    with open(train_meta_file, 'r') as f:
-        train_meta_data = json.load(f)
 
-    # TODO: load data metafile in load_data
     test_dataset = load_data(
-        train_meta_data['data'], data_meta_file, train_meta_data['model'])[1]
-    evaluate(exp_path, trainer, test_dataset)
+        args.data, data_meta_file, args.model)[1]
+    evaluate(exp_path, trainer, test_dataset, args.task)
 
 
-# MODE = 'pred', e.g. python model/model.py --mode pred --load model/experiments/pubmedbert_relevant_sample_20240730/checkpoint-565 --data data/prepared_data/all/psychedelic_study_relevant.csv
 def load_and_predict(args: argparse.Namespace) -> None:
+    """ Load a model from a given path and predict on a given dataset, either a test DataSplit or a file
+
+        If args.data is not specified, the test split in the data directory used for training will be used.
+        If args.data is a file, the model will predict on this file. The file is expected to have an 'id' and 'text' column.
+
+        Example call for MODE = 'pred': python model/model.py --mode pred --load model/experiments/pubmedbert_relevant_sample_20240730/checkpoint-565 --data data/prepared_data/all/psychedelic_study_relevant.csv
+    """
     # Load model from path
     args = set_args_from_file(args)
     trainer = load_model(args)
-
     exp_path = os.path.dirname(args.load)
-    train_meta_file = os.path.join(exp_path, 'params.json')
-    with open(train_meta_file, 'r') as f:
-        train_meta_data = json.load(f)
+    data_meta_file = os.path.join(args.data, 'meta.json')
 
     # Case 1: Test split of training used
     if args.data is None:
-        data_meta_file = os.path.join(args.data, 'meta.json')
-        data = train_meta_data['data']
         dataset = load_data(
-            train_meta_data['data'], data_meta_file, train_meta_data['model'])[1]
+            args.data, data_meta_file, args.model)[1]
         outfile_name = f'{os.path.basename(args.load)}_test_split'
         outfile = predict(exp_path, trainer, dataset, outfile_name)
     else:
-        # check if it is a file
         if os.path.isfile(args.data):
             data = args.data
         else:
             raise ValueError('Please provide a valid path to the data file')
-        model = MODEL_IDENTIFIER[train_meta_data['model']]
+        model = MODEL_IDENTIFIER[args.model]
         tokenizer = AutoTokenizer.from_pretrained(model)
-        max_length = train_meta_data['max_length']
-        
-        # TODO: do not hardcode is_multilabel
-        dataset = SimpleDataset(data, tokenizer, max_length, True)
-        # checkpoint + file
+        max_length = args.max_length
+        dataset = SimpleDataset(
+            data, tokenizer, max_length, args.is_multilabel)
         outfile_name = f'{os.path.basename(args.load)}_{os.path.basename(data).split(".")[0]}'
         outfile = predict(exp_path, trainer, dataset, outfile_name)
     return outfile

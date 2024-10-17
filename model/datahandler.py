@@ -41,9 +41,11 @@ MODEL_IDENTIFIER = {
 # TODO: Make load and get more consistent
 # TODO: Typing and docstrings
 
-
+############################################################################################################
+# DATA SPLIT CLASS, SPECIFIC FOR PSYNAMIC
+############################################################################################################
 class DataSplit(Dataset):
-    "PyTorch Dataset class for a given data split."
+    "PyTorch Dataset class for a given data split, DataHandler class creates DataSplits."
     ID_COL = 'id'
     TEXT_COL = 'text'
     LABEL_COL = 'labels'
@@ -142,21 +144,25 @@ class DataSplit(Dataset):
                 return True
         return False
 
+
+############################################################################################################
+# ABSTRACT CLASS FOR A DATA SPLIT USED FOR TRAINING OR PREDICTION
+############################################################################################################
 class SimpleDataset(Dataset):
     """Simple class to predict but not evaluate on a dataset."""
-    
+
     ID_COL = 'id'
     TEXT_COL = 'text'
-    
+
     def __init__(self, csv_file, tokenizer, max_len, multilabel):
         self.df = pd.read_csv(csv_file)
         self.tokenizer = tokenizer
         self.max_len = max_len
         self.is_multilabel = multilabel
-    
+
     def __len__(self):
         return len(self.df)
-    
+
     def __getitem__(self, idx):
         text = self.df.iloc[idx][self.TEXT_COL]
         encoding = self.tokenizer(
@@ -167,21 +173,22 @@ class SimpleDataset(Dataset):
             return_tensors='pt'
         )
         return {key: val.squeeze(0) for key, val in encoding.items()}
-    
+
     def __next__(self):
         if self._index < len(self.df):
             id_ = self.df.iloc[self._index][self.ID_COL]
             text = self.df.iloc[self._index][self.TEXT_COL]
-            label = '[]' # TODO: a little hacky, fix later
+            label = '[]'  # TODO: a little hacky, fix later
             self._index += 1
             return id_, text, label
         else:
             raise StopIteration
-    
+
     def __iter__(self):
         self._index = 0
         return self
-        
+
+
 class DataSplitBIO(DataSplit):
     """ PyTorch Dataset class for a given data split for NER tasks.
 
@@ -194,6 +201,7 @@ class DataSplitBIO(DataSplit):
         self.max_len = max_len
         self.label2id = label2id
         self.tokenizer = tokenizer
+        self.is_multilabel = False
 
         # Convert string representations of lists to lists
         self.df[self.TOKEN_COL] = self.df[self.TOKEN_COL].apply(
@@ -202,7 +210,6 @@ class DataSplitBIO(DataSplit):
 
         # Make sure the ids of label2id are integers
         self.label2id = {k: int(v) for k, v in self.label2id.items()}
-
 
     def __getitem__(self, idx: int) -> dict:
         tokens = self.df.iloc[idx][self.TOKEN_COL]
@@ -238,25 +245,247 @@ class DataSplitBIO(DataSplit):
 
         # Add the labels to the encoding
         encoding["labels"] = torch.tensor(label_ids)
-        
+
         # Convert tensor dimensions from (1, max_len) to (max_len)
         return {key: val.squeeze(0) for key, val in encoding.items()}
 
+    
+    def __next__(self):
+        if self._index < len(self.df):
+            id_ = self.df.iloc[self._index][self.ID_COL]
+            tokens = self.df.iloc[self._index][self.TOKEN_COL]
+            ner_tags = self.df.iloc[self._index][self.NER_COL]
+            self._index += 1
+            return id_, tokens, ner_tags
+        else:
+            raise StopIteration   
+        
     @property
     def labels(self) -> list[str]:
         return list(self.label2id.keys())
 
 
+class DataHandlerBIO():
+    TOKEN_COL = 'tokens'
+    NER_COL = 'ner_tags'
+    ID_COL = 'id'
+
+    def __init__(self, data_path: str, model: str = 'scibert') -> None:
+        self.model = MODEL_IDENTIFIER[model]
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model)
+
+        # if data_path is a file: read in the data
+        if path.isfile(data_path):
+            self.df = pd.read_json(data_path, lines=True)
+            self.label2id = self._detect_labels()
+            self.id2label = {v: k for k, v in self.label2id.items()}
+            self.max_len = self._detect_length()
+
+        self.train = None
+        self.test = None
+        self.val = None
+        self.use_val = None
+        self.train_size = None
+
+    def _detect_labels(self) -> dict:
+        """Detect the labels in the dataset and return a dictionary mapping the labels to integers."""
+        labels = set()
+        for tags in self.df[self.NER_COL]:
+            labels.update(tags)
+        labels = sorted(list(labels), reverse=True)
+        return {label: i for i, label in enumerate(labels)}
+
+    def _detect_length(self) -> int:
+        """
+        Determine a suitable max_len for tokenized inputs based on the token lengths in the dataframe using a tokenizer.
+        """
+        percentile = 95
+
+        def tokenize_text(tokens):
+            text = " ".join(tokens)  # Reconstruct the text from tokens
+            encoded = self.tokenizer.encode(
+                text, add_special_tokens=False)  # Tokenize text
+            return len(encoded)
+        tokenized_texts = self.df[self.TOKEN_COL].tolist()
+        token_lengths = [tokenize_text(tokens) for tokens in tokenized_texts]
+        max_length = int(np.percentile(token_lengths, percentile))
+        if 'bert' in self.model.lower():
+            max_model_length = MAX_MODEL_LENGTH['bert']
+            if max_length > max_model_length:
+                max_length = max_model_length
+
+        return max_length
+
+    def get_split(self, train_size: float = 0.8, use_val: bool = False, seed: int = 42) -> tuple[DataSplitBIO, DataSplitBIO, Union[DataSplitBIO, None]]:
+        """Get stratified split of the data, with an optional validation set.
+
+        Args:
+            train_size (float, optional): Size of the training set. Defaults to 0.8.
+            use_val (bool, optional): Whether to use a validation set. Defaults to False.
+            seed (int, optional): Random seed. Defaults to 42.
+
+        Returns:
+            tuple: Train, test, and validation set. Validation set is None if use_val is False.
+        """
+
+        if self.use_val is None:
+            self.use_val = use_val
+        # If splits have not been created yet, create them
+        if self.train is None:
+            np.random.seed(seed)
+
+            shuffled_df = self.df.sample(
+                frac=1, random_state=seed).reset_index(drop=True)
+
+            # Calculate the split sizes
+            n_total = len(shuffled_df)
+            if use_val:
+                n_train = int(train_size * n_total)
+                n_rest = n_total - n_train
+                n_val = int(n_rest * 0.5)
+                train_df = shuffled_df.iloc[:n_train]
+                val_df = shuffled_df.iloc[n_train:n_train + n_val]
+                test_df = shuffled_df.iloc[n_train + n_val:]
+            else:
+                n_train = int(train_size * n_total)
+                train_df = shuffled_df.iloc[:n_train]
+                test_df = shuffled_df.iloc[n_train:]
+                val_df = None
+
+            self.train = train_df
+            self.test = test_df
+            self.val = val_df
+            self.use_val = use_val
+            self.train_size = train_size
+            self.max_len = self._detect_length()
+
+        # Check for overlaps
+        if self.check_overlap():
+            raise ValueError('Overlap between splits detected.')
+        train = DataSplitBIO(self.train, self.label2id,
+                             self.tokenizer, self.max_len)
+        test = DataSplitBIO(self.test, self.label2id,
+                            self.tokenizer, self.max_len)
+        if self.use_val:
+            return train, test, DataSplitBIO(self.val, self.label2id, self.tokenizer, self.max_len)
+        else:
+            return train, test, None
+
+    def save_split(self, directory: str = "data_splits") -> None:
+        """Save the train, test, and optionally validation splits to CSV files along with a meta file."""
+        # Create the directory if it doesn't exist
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        if self.train is None or self.test is None:
+            raise ValueError(
+                "No splits have been created yet, use get_split() first."
+            )
+
+        # Define file paths
+        train_path = os.path.join(directory, "train.csv")
+        test_path = os.path.join(directory, "test.csv")
+        val_path = os.path.join(directory, "val.csv")
+
+        self.train.to_csv(train_path, index=False)
+        self.test.to_csv(test_path, index=False)
+
+        if self.val is not None:
+            self.val.to_csv(val_path, index=False)
+
+        # Save metadata
+        meta = {
+            "Task": "NER",
+            "Date": datetime.now().strftime("%Y%m%d"),
+            "Int_to_label": {v: k for k, v in self.label2id.items()},
+            "Train_size": len(self.train),
+            "Use_val": self.val is not None,
+            "Test_size": len(self.test),
+            "Is_multilabel": False,
+        }
+
+        meta_path = os.path.join(directory, "meta.json")
+        with open(meta_path, "w") as f:
+            json.dump(meta, f, indent=4)
+
+        print(f"Splits and metadata saved in directory '{directory}'.")
+
+    def load_splits(self, directory: str) -> None:
+        """Load the train, test, and optionally validation splits from a directory and load the meta file."""
+        # Load metadata
+        with open(os.path.join(directory, "meta.json"), "r") as f:
+            meta = json.load(f)
+
+        self.int2label = meta["Int_to_label"]
+        self.label2id = {v: k for k, v in self.int2label.items()}
+        self.use_val = meta["Use_val"]
+        self.train_size = meta["Train_size"]
+
+        # Load splits
+        self.train = pd.read_csv(os.path.join(directory, "train.csv"))
+        self.test = pd.read_csv(os.path.join(directory, "test.csv"))
+        self.val = None
+        if self.use_val:
+            self.val = pd.read_csv(os.path.join(directory, "val.csv"))
+
+        self.df = pd.concat([self.train, self.test, self.val])
+        self.max_len = self._detect_length()
+
+    def check_overlap(self):
+        """Check and print overlapping IDs between the train, test, and validation splits."""
+        if self.train is None or self.test is None:
+            raise ValueError("No splits have been created yet.")
+
+        # Ensure 'id' column exists in the DataFrames
+        if 'id' not in self.train.columns or 'id' not in self.test.columns:
+            raise ValueError(
+                "'id' column is required in train, test, and validation DataFrames.")
+
+        # Initialize overlap report
+        overlap_report = {
+            "Train-Test": None,
+            "Train-Val": None,
+            "Test-Val": None
+        }
+
+        # Check for overlap between train and test
+        overlap_train_test = self.train.merge(self.test, on='id', how='inner')
+        if not overlap_train_test.empty:
+            overlap_report["Train-Test"] = overlap_train_test['id'].tolist()
+            print(
+                f"Overlap between Train and Test splits: {overlap_report['Train-Test']}")
+
+        if self.val is not None:
+            # Check for overlap between train and validation
+            overlap_train_val = self.train.merge(
+                self.val, on='id', how='inner')
+            if not overlap_train_val.empty:
+                overlap_report["Train-Val"] = overlap_train_val['id'].tolist()
+                print(
+                    f"Overlap between Train and Validation splits: {overlap_report['Train-Val']}")
+
+            # Check for overlap between test and validation
+            overlap_test_val = self.test.merge(self.val, on='id', how='inner')
+            if not overlap_test_val.empty:
+                overlap_report["Test-Val"] = overlap_test_val['id'].tolist()
+                print(
+                    f"Overlap between Test and Validation splits: {overlap_report['Test-Val']}")
+
+############################################################################################################
+# ABSTRACT CLASS FOR SPLITTING AND HANDLING DATA
+############################################################################################################
 class DataHandler():
     """ Abstract DataHandler class to handle data loading, preprocessing and splitting.
         Idea: Inherit from this class and implement the abstract methods to create a DataHandler for a specific dataset.
     """
-    ID_COL = 'id'
+    ID_COL = 'id'  # Required column name, shall be defined in the inheriting class with read_in_data()
+    # Required column name, shall be defined in the inheriting class with read_in_data()
     TEXT_COL = 'text'
+    # Required column name, shall be defined in the inheriting class with read_in_data()
     LABEL_COL = 'labels'
-    ANNOTATOR_COL = 'annotator'
+    ANNOTATOR_COL = 'annotator'  # Optional column for annotator information
 
-    def __init__(self, model: str = 'scibert', data_path: str = None, meta_file: str = None, int_to_label: str = None, ) -> None:
+    def __init__(self, model: str = 'scibert', data_path: str = None, meta_file: str = None, int_to_label: dict[str] = None, ) -> None:
         self.model = MODEL_IDENTIFIER[model]
         self.nr_classes = False
         self.tokenizer = AutoTokenizer.from_pretrained(self.model)
@@ -660,214 +889,9 @@ class DataHandler():
             label_list.sort()
             return label_list
 
-
-class DataHandlerBIO():
-    TOKEN_COL = 'tokens'
-    NER_COL = 'ner_tags'
-    ID_COL = 'id'
-
-    def __init__(self, data_path: str, model: str = 'scibert') -> None:
-        self.model = MODEL_IDENTIFIER[model]
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model)
-
-        # if data_path is a file: read in the data
-        if path.isfile(data_path):
-            self.df = pd.read_json(data_path, lines=True)
-            self.label2id = self._detect_labels()
-            self.id2label = {v: k for k, v in self.label2id.items()}
-            self.max_len = self._detect_length()
-
-        self.train = None
-        self.test = None
-        self.val = None
-        self.use_val = None
-        self.train_size = None
-
-    def _detect_labels(self) -> dict:
-        """Detect the labels in the dataset and return a dictionary mapping the labels to integers."""
-        labels = set()
-        for tags in self.df[self.NER_COL]:
-            labels.update(tags)
-        labels = sorted(list(labels), reverse=True)
-        return {label: i for i, label in enumerate(labels)}
-
-    def _detect_length(self) -> int:
-        """
-        Determine a suitable max_len for tokenized inputs based on the token lengths in the dataframe using a tokenizer.
-        """
-        percentile = 95
-
-        def tokenize_text(tokens):
-            text = " ".join(tokens)  # Reconstruct the text from tokens
-            encoded = self.tokenizer.encode(
-                text, add_special_tokens=False)  # Tokenize text
-            return len(encoded)
-        tokenized_texts = self.df[self.TOKEN_COL].tolist()
-        token_lengths = [tokenize_text(tokens) for tokens in tokenized_texts]
-        max_length = int(np.percentile(token_lengths, percentile))
-        if 'bert' in self.model.lower():
-            max_model_length = MAX_MODEL_LENGTH['bert']
-            if max_length > max_model_length:
-                max_length = max_model_length
-
-        return max_length
-
-    def get_split(self, train_size: float = 0.8, use_val: bool = False, seed: int = 42) -> tuple:
-        """Get stratified split of the data, with an optional validation set.
-
-        Args:
-            train_size (float, optional): Size of the training set. Defaults to 0.8.
-            use_val (bool, optional): Whether to use a validation set. Defaults to False.
-            seed (int, optional): Random seed. Defaults to 42.
-
-        Returns:
-            tuple: Train, test, and validation set. Validation set is None if use_val is False.
-        """
-
-        if self.use_val is None:
-            self.use_val = use_val
-        # If splits have not been created yet, create them
-        if self.train is None:
-            np.random.seed(seed)
-
-            shuffled_df = self.df.sample(
-                frac=1, random_state=seed).reset_index(drop=True)
-
-            # Calculate the split sizes
-            n_total = len(shuffled_df)
-            if use_val:
-                n_train = int(train_size * n_total)
-                n_rest = n_total - n_train
-                n_val = int(n_rest * 0.5)
-                train_df = shuffled_df.iloc[:n_train]
-                val_df = shuffled_df.iloc[n_train:n_train + n_val]
-                test_df = shuffled_df.iloc[n_train + n_val:]
-            else:
-                n_train = int(train_size * n_total)
-                train_df = shuffled_df.iloc[:n_train]
-                test_df = shuffled_df.iloc[n_train:]
-                val_df = None
-
-            self.train = train_df
-            self.test = test_df
-            self.val = val_df
-            self.use_val = use_val
-            self.train_size = train_size
-            self.max_len = self._detect_length()
-
-        # Check for overlaps
-        if self.check_overlap():
-            raise ValueError('Overlap between splits detected.')
-        train = DataSplitBIO(self.train, self.label2id,
-                             self.tokenizer, self.max_len)
-        test = DataSplitBIO(self.test, self.label2id,
-                            self.tokenizer, self.max_len)
-        if self.use_val:
-            return train, test, DataSplitBIO(self.val, self.label2id, self.tokenizer, self.max_len)
-        else:
-            return train, test, None
-
-    def save_split(self, directory: str = "data_splits") -> None:
-        """Save the train, test, and optionally validation splits to CSV files along with a meta file."""
-        # Create the directory if it doesn't exist
-        if not os.path.exists(directory):
-            os.makedirs(directory)
-
-        if self.train is None or self.test is None:
-            raise ValueError(
-                "No splits have been created yet, use get_split() first."
-            )
-
-        # Define file paths
-        train_path = os.path.join(directory, "train.csv")
-        test_path = os.path.join(directory, "test.csv")
-        val_path = os.path.join(directory, "val.csv")
-
-        self.train.to_csv(train_path, index=False)
-        self.test.to_csv(test_path, index=False)
-
-        if self.val is not None:
-            self.val.to_csv(val_path, index=False)
-
-        # Save metadata
-        meta = {
-            "Task": "NER",
-            "Date": datetime.now().strftime("%Y%m%d"),
-            "Int_to_label": {v: k for k, v in self.label2id.items()},
-            "Train_size": len(self.train),
-            "Use_val": self.val is not None,
-            "Test_size": len(self.test),
-            "Is_multilabel": False,
-        }
-
-        meta_path = os.path.join(directory, "meta.json")
-        with open(meta_path, "w") as f:
-            json.dump(meta, f, indent=4)
-
-        print(f"Splits and metadata saved in directory '{directory}'.")
-
-    def load_splits(self, directory: str) -> None:
-        """Load the train, test, and optionally validation splits from a directory and load the meta file."""
-        # Load metadata
-        with open(os.path.join(directory, "meta.json"), "r") as f:
-            meta = json.load(f)
-
-        self.int2label = meta["Int_to_label"]
-        self.label2id = {v: k for k, v in self.int2label.items()}
-        self.use_val = meta["Use_val"]
-        self.train_size = meta["Train_size"]
-
-        # Load splits
-        self.train = pd.read_csv(os.path.join(directory, "train.csv"))
-        self.test = pd.read_csv(os.path.join(directory, "test.csv"))
-        self.val = None
-        if self.use_val:
-            self.val = pd.read_csv(os.path.join(directory, "val.csv"))
-
-        self.df = pd.concat([self.train, self.test, self.val])
-        self.max_len = self._detect_length()
-
-    def check_overlap(self):
-        """Check and print overlapping IDs between the train, test, and validation splits."""
-        if self.train is None or self.test is None:
-            raise ValueError("No splits have been created yet.")
-
-        # Ensure 'id' column exists in the DataFrames
-        if 'id' not in self.train.columns or 'id' not in self.test.columns:
-            raise ValueError(
-                "'id' column is required in train, test, and validation DataFrames.")
-
-        # Initialize overlap report
-        overlap_report = {
-            "Train-Test": None,
-            "Train-Val": None,
-            "Test-Val": None
-        }
-
-        # Check for overlap between train and test
-        overlap_train_test = self.train.merge(self.test, on='id', how='inner')
-        if not overlap_train_test.empty:
-            overlap_report["Train-Test"] = overlap_train_test['id'].tolist()
-            print(
-                f"Overlap between Train and Test splits: {overlap_report['Train-Test']}")
-
-        if self.val is not None:
-            # Check for overlap between train and validation
-            overlap_train_val = self.train.merge(
-                self.val, on='id', how='inner')
-            if not overlap_train_val.empty:
-                overlap_report["Train-Val"] = overlap_train_val['id'].tolist()
-                print(
-                    f"Overlap between Train and Validation splits: {overlap_report['Train-Val']}")
-
-            # Check for overlap between test and validation
-            overlap_test_val = self.test.merge(self.val, on='id', how='inner')
-            if not overlap_test_val.empty:
-                overlap_report["Test-Val"] = overlap_test_val['id'].tolist()
-                print(
-                    f"Overlap between Test and Validation splits: {overlap_report['Test-Val']}")
-
-
+############################################################################################################
+# DATAHANDLER CLASSES, SPECIFIC FOR PSYCHNAMIC DATASETS
+############################################################################################################
 class PsyNamicSingleLabel(DataHandler):
 
     def __init__(self, data_path: str, relevant_class: str, meta_file: Optional[str] = None) -> None:
