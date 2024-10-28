@@ -16,9 +16,9 @@ def header_layout():
                             dbc.DropdownMenu(
                                 children=[
                                     dbc.DropdownMenuItem(
-                                        "Substance/Condition", href="view/sub_cond"),
+                                        "Substance/Condition", href="/view/sub_cond"),
                                     dbc.DropdownMenuItem(
-                                        "Time", href="view/time"),
+                                        "Time", href="/view/time"),
                                     dbc.DropdownMenuItem(divider=True),
                                     dbc.DropdownMenuItem(
                                         "Something else here", href="#"),
@@ -48,7 +48,6 @@ def header_layout():
         expand="lg",
         className="bg-light"
     )
-
 
 def footer_layout():
     return html.Footer(
