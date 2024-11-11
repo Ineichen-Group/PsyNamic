@@ -5,3 +5,5 @@ dash_bootstrap_components
 plotly
 pep8
 pylint
+sqlalchemy
+psycopg2-binary
