@@ -17,7 +17,7 @@ PROD_DIR = '/home/vera/Documents/Arbeit/CRS/PsychNER/'
 
 
 def read_in_labels(csv: str) -> dict[str, list[str]]:
-    with open(csv, 'r') as file:
+    with open(csv, 'r', encoding='utf-8') as file:
         data = json.load(file)
     ungrouped_labels = {}
     for d in data:
@@ -25,21 +25,22 @@ def read_in_labels(csv: str) -> dict[str, list[str]]:
             ungrouped_labels[key] = value
     return ungrouped_labels
 
-def read_in_predictions(csv: str) -> pd.DataFrame:    
+
+def read_in_predictions(csv: str) -> pd.DataFrame:
     params_file = os.path.join(os.path.dirname(csv), 'params.json')
-    with open(params_file, 'r') as file:
+    with open(params_file, 'r', encoding='utf-8') as file:
         params = json.load(file)
-        
+
     data_path = params['data']
     task = params['task']
-    meta_file = os.path.join(PROD_DIR, data_path, f'meta.json')
-    with open(meta_file, 'r') as file:
-                meta = json.load(file)
-                int_to_label = meta['Int_to_label']
-                int_to_label = {int(k): v for k, v in int_to_label.items()}
-                is_multilabel = meta['Is_multilabel']
+    meta_file = os.path.join(PROD_DIR, data_path, 'meta.json')
+    with open(meta_file, 'r', encoding='utf-8') as file:
+        meta = json.load(file)
+        int_to_label = meta['Int_to_label']
+        int_to_label = {int(k): v for k, v in int_to_label.items()}
+        is_multilabel = meta['Is_multilabel']
     task = task.capitalize()
-    
+
     pred_df = pd.read_csv(csv)
     new_df = []
     # iterate through all rows in the dataframe
@@ -47,13 +48,13 @@ def read_in_predictions(csv: str) -> pd.DataFrame:
         for i, prob in enumerate(literal_eval(row['probability'])):
             pred_dict = {
                 'id': row['id'],
-                'task': task,                
+                'task': task,
                 'label': int_to_label[i],
                 'probability': prob,
                 'is_multilabel': is_multilabel
             }
             new_df.append(pred_dict)
-    
+
     return pd.DataFrame(new_df)
 
 
@@ -75,10 +76,11 @@ def read_in_study_information(csv: str) -> pd.DataFrame:
             'year': int(row['year']),
             # 'url': url
         }
-        
+
         new_df.append(study_dict)
     return pd.DataFrame(new_df)
-        
+
+
 def get_url(doi: str) -> str:
     """Get the link to pubmed of the article with the given DOI."""
     # PubMed API endpoint
@@ -115,8 +117,9 @@ def get_url(doi: str) -> str:
         print(f"Error occurred: {e}")
         return ''
 
+
 def main():
-    
+
     task_name1 = 'Substances'
     task_name2 = 'Condition'
     df1 = read_in_predictions(substance_prediction)
@@ -127,8 +130,7 @@ def main():
     df.to_csv(os.path.join('./data', 'predictions.csv'))
     df = read_in_study_information(study_information)
     df.to_csv(os.path.join('./data', 'studies.csv'))
-    
-    
-    
+
+
 if __name__ == '__main__':
-    main()   
+    main()

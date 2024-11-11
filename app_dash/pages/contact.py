@@ -1,4 +1,3 @@
-import dash
 from dash import html
 
 def contact_layout():

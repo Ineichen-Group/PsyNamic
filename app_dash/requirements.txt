@@ -1,0 +1,7 @@
+pandas
+tqdm
+dash
+dash_bootstrap_components
+plotly
+pep8
+pylint

@@ -1,6 +1,4 @@
-import dash
 from dash import html
-from components.layout import header_layout, footer_layout
 
 
 def home_layout():
