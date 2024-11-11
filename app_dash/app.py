@@ -37,7 +37,7 @@ def display_page(pathname: str):
         return contact_layout()
     elif pathname == '/view/time':
         return time_graph()
-    elif pathname == '/view/sub_cond':
+    elif pathname == '/view/dual-task':
         return dual_task_graphs()
     else:
         return home_layout()
