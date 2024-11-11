@@ -1,19 +1,23 @@
 from dash.dependencies import Input, Output, State, ALL
 from dash import callback_context
 import plotly.express as px
+import pandas as pd
 from components.layout import studies
-from pages.views.substance_condition import get_substance_data, get_condition_data
+from pages.views.dual_task import get_prediction_data
 
 SECONDARY_COLOR = '#c7c7c7'
+STYLE_NORMAL = {'border': '1px solid #ccc'}
+STYLE_ERROR = {'border': '2px solid red'}
 
 
-def register_callbacks(app, data_paths):
-    register_time_callbacks(app, data_paths['frequency_df'])
+def register_callbacks(app, data_paths: dict):
+    register_time_view_callbacks(app, data_paths['frequency_df'])
     # register_studyview_callbacks(app)
-    register_sub_con_callbacks(app)
+    reset_click_data(app)
+    register_dual_task_view_callbacks(app)
 
 
-def register_time_callbacks(app, frequency_df):
+def register_time_view_callbacks(app, frequency_df: pd.DataFrame):
     @app.callback(
         Output('time-plot', 'figure'),
         Input('start-year', 'value'),
@@ -31,45 +35,77 @@ def register_time_callbacks(app, frequency_df):
         return fig
 
 
-def register_sub_con_callbacks(app):
+def register_dual_task_view_callbacks(app):
     @app.callback(
-        Output('condition-bar-graph', 'figure'),
-        Output('substance-pie-graph', 'figure'),
-        Input('substance-pie-graph', 'clickData'),
-    )
-    def update_graph(click_data):
-        df_substance = get_substance_data()
-        substance_filter = click_data['points'][0]['label'] if click_data else None
-        df_condition = get_condition_data(substance_filter)
+        Output('task2-bar-graph', 'figure'),
+        Output('task1-pie-graph', 'figure'),
+        Output('jux_dropdown1', 'style'),
+        Output('jux_dropdown2', 'style'),
+        Output('validation-message', 'children'),
+        [Input('task1-pie-graph', 'clickData'),
+         Input('jux_dropdown1', 'value'),
+         Input('jux_dropdown2', 'value'),])
+    def update_graph(click_data, dropdown1_value, dropdown2_value):
+        # Default values # TODO: Move to a global variable
+        task1_value = dropdown1_value or 'Substances'
+        task2_value = dropdown2_value or 'Condition'
+        message = ""
 
-        # Update bar graph
-        bar_fig = px.bar(df_condition, x='Frequency',
-                         y='Condition', title='Conditions', orientation='h')
+        # Check if the dropdown values are the same, if so, return an error message
+        if dropdown1_value == dropdown2_value:
+            return {}, {}, STYLE_ERROR, STYLE_ERROR, "Choose two different values"
 
-        # Update pie chart with highlighted segment
-        pie_fig = px.pie(df_substance, values='Frequency',
-                         names='Substance', title='Substances')
+        style1 = STYLE_NORMAL
+        style2 = STYLE_NORMAL
 
-        if substance_filter:
+        df_task1 = get_prediction_data(task1_value)
+        pie_fig = px.pie(df_task1, values='Frequency',
+                         names=task1_value, title=f'Task 1: {task1_value}')
+        if click_data:
+            label = click_data['points'][0]['label']
             color = click_data['points'][0]['color']
-            # check if color is grey
+
+            # If the selected segment is the secondary color, reset the color to the default color
             if rgb_to_hex(color) == SECONDARY_COLOR:
-                # TODO: a little bit hacky, but it works
                 labels = pie_fig['data'][0]['labels'].tolist()
                 values = pie_fig['data'][0]['values'].tolist()
-                # sort labels by values
-                labels = [x for _, x in sorted(zip(values, labels), key=lambda pair: pair[0], reverse=True)]
-                idx = labels.index(substance_filter)
-                # reset color to default
+                labels = [x for _, x in sorted(
+                    zip(values, labels), key=lambda pair: pair[0], reverse=True)]
+                idx = labels.index(label)
                 color = pie_fig['layout']['template']['layout']['colorway'][idx]
 
-            # set all other segments to grey, keep selected segment the same color
+            # Set all other segments to grey, keep the selected segment the same color
             pie_fig.update_traces(marker=dict(colors=[
-                                  SECONDARY_COLOR if s != substance_filter else color for s in df_substance['Substance']]))
-            # pull out the selected segment
+                SECONDARY_COLOR if s != label else color for s in df_task1[task1_value]]))
+            # Pull out the selected segment
             pie_fig.update_traces(
-                pull=[0.1 if s == substance_filter else 0 for s in df_substance['Substance']])
-        return bar_fig, pie_fig
+                pull=[0.1 if s == label else 0 for s in df_task1[task1_value]])
+
+            # Filter the data of the bar chart based on the selected segment
+            df_task2 = get_prediction_data(task2_value, task1_value, label)
+
+            # Create the bar chart with the same color as the selected segment
+            bar_fig = px.bar(df_task2, x='Frequency',
+                             y=task2_value, title=f'Task 2: {task2_value}', orientation='h', color_discrete_sequence=[color])
+
+        else:
+            df_task2 = get_prediction_data(task2_value)
+            bar_fig = px.bar(df_task2, x='Frequency',
+                             y=task2_value, title=f'Task 2: {task2_value}', orientation='h', color_discrete_sequence=[SECONDARY_COLOR])
+
+        return bar_fig, pie_fig, style1, style2, message
+
+
+def reset_click_data(app):
+    @app.callback(
+        Output('task1-pie-graph', 'clickData'),
+        Input('jux_dropdown1', 'value'),
+        Input('jux_dropdown2', 'value'),
+    )
+    # TODO: Not sure which order the callbacks are called --> this might not be consistent
+    def reset_click_data(dropdown1_value, dropdown2_value):
+        """When the dropdown values change, reset the click data"""
+        return None
 
 
 # Define callback for accordion collapse

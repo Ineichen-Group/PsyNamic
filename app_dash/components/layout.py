@@ -16,7 +16,7 @@ def header_layout():
                             dbc.DropdownMenu(
                                 children=[
                                     dbc.DropdownMenuItem(
-                                        "Substance/Condition", href="/view/sub_cond"),
+                                        "Dual Task Analysis", href="/view/dual-task"),
                                     dbc.DropdownMenuItem(
                                         "Time", href="/view/time"),
                                     dbc.DropdownMenuItem(divider=True),
