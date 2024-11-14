@@ -1,10 +1,11 @@
 import dash
 from dash.dependencies import Input, Output, State, ALL
-from dash import callback_context, html
+from dash import callback_context, html, no_update
 import plotly.express as px
 import pandas as pd
-from pages.views.dual_task import get_prediction_data
-from components.layout import filter_button
+from data.queries import get_freq
+from components.layout import filter_button, study_view
+from data.queries import get_studies
 
 SECONDARY_COLOR = '#c7c7c7'
 STYLE_NORMAL = {'border': '1px solid #ccc'}
@@ -16,6 +17,7 @@ def register_callbacks(app, data_paths: dict):
     register_studyview_callbacks(app)
     reset_click_data(app)
     register_dual_task_view_callbacks(app)
+    register_filter(app)
 
 
 def register_time_view_callbacks(app, frequency_df: pd.DataFrame):
@@ -61,7 +63,7 @@ def register_dual_task_view_callbacks(app):
         style1 = STYLE_NORMAL
         style2 = STYLE_NORMAL
 
-        df_task1 = get_prediction_data(task1_value)
+        df_task1 = get_freq(task1_value)
         pie_fig = px.pie(df_task1, values='Frequency',
                          names=task1_value, title=f'Task 1: {task1_value}')
 
@@ -82,19 +84,21 @@ def register_dual_task_view_callbacks(app):
             # Update the pie chart color for the selected segment
             pie_fig.update_traces(marker=dict(colors=[
                 SECONDARY_COLOR if s != label else color for s in df_task1[task1_value]]))
+
             pie_fig.update_traces(
                 pull=[0.1 if s == label else 0 for s in df_task1[task1_value]])
 
             # Add this clicked label as a filter
-            filters = [{'name': task1_value, 'value': label, 'color': color}]
+            filters = [{'category': task1_value,
+                        'value': label, 'color': color}]
 
             # Filter Task 2 based on selected Task 1 label
-            df_task2 = get_prediction_data(task2_value, task1_value, label)
+            df_task2 = get_freq(task2_value, task1_value, label)
             bar_fig = px.bar(df_task2, x='Frequency', y=task2_value,
                              title=f'Task 2: {task2_value}', orientation='h', color_discrete_sequence=[color])
 
         else:
-            df_task2 = get_prediction_data(task2_value)
+            df_task2 = get_freq(task2_value)
             bar_fig = px.bar(df_task2, x='Frequency', y=task2_value,
                              title=f'Task 2: {task2_value}', orientation='h', color_discrete_sequence=[SECONDARY_COLOR])
 
@@ -102,10 +106,23 @@ def register_dual_task_view_callbacks(app):
         return bar_fig, pie_fig, style1, style2, message, html.Div(
             className="d-flex flex-wrap",
             children=[
-                filter_button(filter['color'], filter['value'])
+                filter_button(filter['color'],
+                              filter['value'], filter['category'])
                 for filter in filters
             ],
         )
+
+
+def register_filter(app):
+    @app.callback(
+        Output('accordion', 'children'),
+        Input('active-filters', 'children'),
+    )
+    def update_study_view(filters):
+        if not filters:
+            return no_update
+        studies = get_studies(filters)
+        return [study_view(s, idx) for idx, s in enumerate(studies)]
 
 
 def reset_click_data(app):
@@ -120,7 +137,6 @@ def reset_click_data(app):
         return None
 
 
-# Define callback for accordion collapse
 def register_studyview_callbacks(app):
     @app.callback(
         Output({'type': 'collapse', 'index': dash.dependencies.ALL}, 'is_open'),

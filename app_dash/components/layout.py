@@ -1,6 +1,7 @@
 import dash
 import dash_bootstrap_components as dbc
 from dash import html
+from data.queries import get_studies
 
 
 def header_layout():
@@ -115,49 +116,55 @@ def search_filter_component():
         ],
     )
 
-def studies_display():
-    studies = [
-        {"title": "Study 1", "authors_short": "Author A",
-         "year": 2020, "abstract": "Abstract 1"},
-        {"title": "Study 2", "authors_short": "Author B",
-         "year": 2021, "abstract": "Abstract 2"},
-        {"title": "Study 3", "authors_short": "Author C",
-         "year": 2022, "abstract": "Abstract 3"},
-    ]
 
+def studies_display():
+    # studies = [
+    #     {"title": "Study 1", "authors_short": "Author A",
+    #      "year": 2020, "abstract": "Abstract 1"},
+    #     {"title": "Study 2", "authors_short": "Author B",
+    #      "year": 2021, "abstract": "Abstract 2"},
+    #     {"title": "Study 3", "authors_short": "Author C",
+    #      "year": 2022, "abstract": "Abstract 3"},
+    # ]
+    studies = get_studies()[:20]
     return html.Div(
         className="m-4",
         id="accordion",
+        children=[study_view(s, idx)
+                  for idx, s in enumerate(studies)
+                  ],
+    )
+
+
+def study_view(s: dict[str, str], idx: int):
+    return dbc.Card(
         children=[
-            dbc.Card(
+            dbc.CardHeader(
                 children=[
-                    dbc.CardHeader(
-                        children=[
-                            html.H5(
-                                f"{s['title']} ({s['authors_short']}, {s['year']})", className="mb-0"
-                            ),
-                            dbc.Button(
-                                html.I(className="fa-solid fa-caret-down"),
-                                color="link",
-                                id={'type': 'collapse-button', 'index': idx},
-                                n_clicks=0,
-                            ),
-                        ],
-                        className="d-flex justify-content-between align-items-center",
-                        id=f"heading{idx+1}",
+                    html.H5(
+                        # f"{s['title']} ({s['authors_short']}, {s['year']})", className="mb-0"
+                        f'{s["title"]}, ({s["year"]})', className="mb-0"
                     ),
-                    dbc.Collapse(
-                        dbc.CardBody(s['abstract']),
-                        id={'type': 'collapse', 'index': idx},
-                        is_open=False,
+                    dbc.Button(
+                        html.I(className="fa-solid fa-caret-down"),
+                        color="link",
+                        id={'type': 'collapse-button', 'index': idx},
+                        n_clicks=0,
                     ),
                 ],
-            ) for idx, s in enumerate(studies)
+                className="d-flex justify-content-between align-items-center",
+                id=f"heading{idx+1}",
+            ),
+            dbc.Collapse(
+                dbc.CardBody(s['abstract']),
+                id={'type': 'collapse', 'index': idx},
+                is_open=False,
+            ),
         ],
     )
 
 
-def filter_button(color: str, filter: str):
+def filter_button(color: str, filter: str, cat: str):
     return dbc.Button(
         children=[
             html.Span(f"{filter} ", style={
@@ -171,7 +178,7 @@ def filter_button(color: str, filter: str):
             "marginRight": "0.5rem",
         },
         color="light",
-        id={'type': 'filter-button', 'index': filter},
+        id=f'{cat}-{filter}',
         n_clicks=0,
-        key=filter  # Ensure each button is identifiable by its filter name
+        value={"category": cat, "value": filter},
     )
