@@ -1,9 +1,10 @@
+import dash
 from dash.dependencies import Input, Output, State, ALL
-from dash import callback_context
+from dash import callback_context, html
 import plotly.express as px
 import pandas as pd
-from components.layout import studies
 from pages.views.dual_task import get_prediction_data
+from components.layout import filter_button
 
 SECONDARY_COLOR = '#c7c7c7'
 STYLE_NORMAL = {'border': '1px solid #ccc'}
@@ -12,7 +13,7 @@ STYLE_ERROR = {'border': '2px solid red'}
 
 def register_callbacks(app, data_paths: dict):
     register_time_view_callbacks(app, data_paths['frequency_df'])
-    # register_studyview_callbacks(app)
+    register_studyview_callbacks(app)
     reset_click_data(app)
     register_dual_task_view_callbacks(app)
 
@@ -42,18 +43,20 @@ def register_dual_task_view_callbacks(app):
         Output('jux_dropdown1', 'style'),
         Output('jux_dropdown2', 'style'),
         Output('validation-message', 'children'),
+        # Update only the filters component
+        Output('active-filters', 'children'),
         [Input('task1-pie-graph', 'clickData'),
          Input('jux_dropdown1', 'value'),
-         Input('jux_dropdown2', 'value'),])
+         Input('jux_dropdown2', 'value')],
+    )
     def update_graph(click_data, dropdown1_value, dropdown2_value):
-        # Default values # TODO: Move to a global variable
         task1_value = dropdown1_value or 'Substances'
         task2_value = dropdown2_value or 'Condition'
         message = ""
 
         # Check if the dropdown values are the same, if so, return an error message
         if dropdown1_value == dropdown2_value:
-            return {}, {}, STYLE_ERROR, STYLE_ERROR, "Choose two different values"
+            return {}, {}, STYLE_ERROR, STYLE_ERROR, "Choose two different values", None
 
         style1 = STYLE_NORMAL
         style2 = STYLE_NORMAL
@@ -61,11 +64,13 @@ def register_dual_task_view_callbacks(app):
         df_task1 = get_prediction_data(task1_value)
         pie_fig = px.pie(df_task1, values='Frequency',
                          names=task1_value, title=f'Task 1: {task1_value}')
+
+        filters = []
+
         if click_data:
             label = click_data['points'][0]['label']
             color = click_data['points'][0]['color']
 
-            # If the selected segment is the secondary color, reset the color to the default color
             if rgb_to_hex(color) == SECONDARY_COLOR:
                 labels = pie_fig['data'][0]['labels'].tolist()
                 values = pie_fig['data'][0]['values'].tolist()
@@ -74,26 +79,33 @@ def register_dual_task_view_callbacks(app):
                 idx = labels.index(label)
                 color = pie_fig['layout']['template']['layout']['colorway'][idx]
 
-            # Set all other segments to grey, keep the selected segment the same color
+            # Update the pie chart color for the selected segment
             pie_fig.update_traces(marker=dict(colors=[
                 SECONDARY_COLOR if s != label else color for s in df_task1[task1_value]]))
-            # Pull out the selected segment
             pie_fig.update_traces(
                 pull=[0.1 if s == label else 0 for s in df_task1[task1_value]])
 
-            # Filter the data of the bar chart based on the selected segment
-            df_task2 = get_prediction_data(task2_value, task1_value, label)
+            # Add this clicked label as a filter
+            filters = [{'name': task1_value, 'value': label, 'color': color}]
 
-            # Create the bar chart with the same color as the selected segment
-            bar_fig = px.bar(df_task2, x='Frequency',
-                             y=task2_value, title=f'Task 2: {task2_value}', orientation='h', color_discrete_sequence=[color])
+            # Filter Task 2 based on selected Task 1 label
+            df_task2 = get_prediction_data(task2_value, task1_value, label)
+            bar_fig = px.bar(df_task2, x='Frequency', y=task2_value,
+                             title=f'Task 2: {task2_value}', orientation='h', color_discrete_sequence=[color])
 
         else:
             df_task2 = get_prediction_data(task2_value)
-            bar_fig = px.bar(df_task2, x='Frequency',
-                             y=task2_value, title=f'Task 2: {task2_value}', orientation='h', color_discrete_sequence=[SECONDARY_COLOR])
+            bar_fig = px.bar(df_task2, x='Frequency', y=task2_value,
+                             title=f'Task 2: {task2_value}', orientation='h', color_discrete_sequence=[SECONDARY_COLOR])
 
-        return bar_fig, pie_fig, style1, style2, message
+        # Return the updated graphs and the filter component with the selected filter
+        return bar_fig, pie_fig, style1, style2, message, html.Div(
+            className="d-flex flex-wrap",
+            children=[
+                filter_button(filter['color'], filter['value'])
+                for filter in filters
+            ],
+        )
 
 
 def reset_click_data(app):
@@ -111,22 +123,22 @@ def reset_click_data(app):
 # Define callback for accordion collapse
 def register_studyview_callbacks(app):
     @app.callback(
-        [Output(f"collapse{idx+1}", "is_open") for idx in range(len(studies))],
-        [Input({'type': 'collapse-button', 'index': ALL}, "n_clicks")],
-        [State(f"collapse{idx+1}", "is_open") for idx in range(len(studies))]
+        Output({'type': 'collapse', 'index': dash.dependencies.ALL}, 'is_open'),
+        Input({'type': 'collapse-button',
+              'index': dash.dependencies.ALL}, 'n_clicks'),
+        State({'type': 'collapse', 'index': dash.dependencies.ALL}, 'is_open'),
     )
-    def toggle_accordion(n_clicks, is_open):
+    def toggle_collapse(n_clicks_list: list, is_open_list):
         ctx = callback_context
-
         if not ctx.triggered:
-            return [False] * len(studies)
-
+            return is_open_list
         button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-        button_index = int(button_id.split('"index": ')[1].strip('}'))
+        index = int(button_id.split('{"index":')[1].split(',')[0])
 
-        return [
-            not is_open[idx] if idx == button_index else False for idx in range(len(studies))
-        ]
+        new_is_open_list = [False] * len(is_open_list)
+        new_is_open_list[index] = not is_open_list[index]
+
+        return new_is_open_list
 
 
 def rgb_to_hex(rgb: str):

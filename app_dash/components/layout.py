@@ -49,6 +49,7 @@ def header_layout():
         className="bg-light"
     )
 
+
 def footer_layout():
     return html.Footer(
         dbc.Container(
@@ -62,54 +63,68 @@ def footer_layout():
     )
 
 
-filters = {"Filter1": "#ff0000", "Filter2": "#00ff00", "Filter3": "#0000ff"}
-
-
 def search_filter_component():
     return html.Div(
         className="m-4",
         children=[
             dbc.Form(
-                className="form-inline my-2 my-lg-0",
+                className="d-flex",
                 children=[
-                    dbc.Input(
-                        type="search",
-                        placeholder="Search",
-                        className="form-control mr-sm-2",
-                        id="search-input",
-                    ),
-                    dbc.Button(
-                        "Search",
-                        color="outline-success",
-                        className="my-2 my-sm-0",
-                        id="search-button",
-                        n_clicks=0,
-                    ),
-                    html.Span("Active Filters:", className="ms-4 me-2"),
-                    html.Div(
-                        className="form-control flex-grow-1",
+                    dbc.Row(
+                        className="flex-grow-1",
                         children=[
-                            filter_button(color, filter)
-                            for filter, color in filters.items()
+                            dbc.Col(
+                                dbc.Input(
+                                    type="search",
+                                    placeholder="Search",
+                                    className="me-2",
+                                    id="search-input",
+                                ),
+                                width=8,
+                            ),
+                            dbc.Col(
+                                dbc.Button(
+                                    "Search",
+                                    color="outline-success",
+                                    className="me-2",
+                                    id="search-button",
+                                    n_clicks=0,
+                                ),
+                                width="auto",
+                            ),
                         ],
+                    ),
+                ],
+            ),
+            dbc.Row(
+                className="mt-3 d-flex align-items-center",
+                children=[
+                    dbc.Col(
+                        html.Span("Active Filters:", className="me-2"),
+                        width="auto",
+                    ),
+                    dbc.Col(
+                        id="active-filters",  # This will be updated dynamically
+                        children=[
+                            # Initially empty, it will be populated by the callback
+                        ],
+                        width="auto",
                     ),
                 ],
             ),
         ],
     )
 
-
-studies = [
-    {"title": "Study 1", "authors_short": "Author A",
-        "year": 2020, "abstract": "Abstract 1"},
-    {"title": "Study 2", "authors_short": "Author B",
-        "year": 2021, "abstract": "Abstract 2"},
-    {"title": "Study 3", "authors_short": "Author C",
-        "year": 2022, "abstract": "Abstract 3"},
-]
-
-
 def studies_display():
+    studies = [
+        {"title": "Study 1", "authors_short": "Author A",
+         "year": 2020, "abstract": "Abstract 1"},
+        {"title": "Study 2", "authors_short": "Author B",
+         "year": 2021, "abstract": "Abstract 2"},
+        {"title": "Study 3", "authors_short": "Author C",
+         "year": 2022, "abstract": "Abstract 3"},
+    ]
+
     return html.Div(
         className="m-4",
         id="accordion",
@@ -119,7 +134,8 @@ def studies_display():
                     dbc.CardHeader(
                         children=[
                             html.H5(
-                                f"{s['title']} ({s['authors_short']}, {s['year']})", className="mb-0"),
+                                f"{s['title']} ({s['authors_short']}, {s['year']})", className="mb-0"
+                            ),
                             dbc.Button(
                                 html.I(className="fa-solid fa-caret-down"),
                                 color="link",
@@ -132,7 +148,7 @@ def studies_display():
                     ),
                     dbc.Collapse(
                         dbc.CardBody(s['abstract']),
-                        id=f"collapse{idx+1}",
+                        id={'type': 'collapse', 'index': idx},
                         is_open=False,
                     ),
                 ],
@@ -150,8 +166,8 @@ def filter_button(color: str, filter: str):
         ],
         style={
             "borderRadius": "1rem",
-            "backgroundColor": "white",
-            "border": f"2px solid {color}",
+            "backgroundColor": f'{color}',
+            "color": "white",
             "marginRight": "0.5rem",
         },
         color="light",

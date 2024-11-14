@@ -1,6 +1,6 @@
 import dash
 import dash_bootstrap_components as dbc
-from dash import html, dcc
+from dash import html, dcc, State
 
 from pages.about import about_layout
 from pages.contact import contact_layout
@@ -22,8 +22,6 @@ app.layout = html.Div([
     header_layout(),
     dcc.Location(id='url', refresh=False),
     html.Div(id='page-content', className='mx-5 my-2'),
-    # search_filter_component(),
-    # studies_display(),
     footer_layout()
 ])
 
@@ -35,16 +33,20 @@ def display_page(pathname: str):
         return about_layout()
     elif pathname == '/contact':
         return contact_layout()
-    elif pathname == '/view/time':
-        return time_graph()
-    elif pathname == '/view/dual-task':
-        return dual_task_graphs()
-    else:
-        return home_layout()
+    elif pathname.startswith('/view'):
+        filtered_display = studies_display()
+        search_filter = search_filter_component()
+        if pathname == '/view/time':
+            return [time_graph(), search_filter, filtered_display]
+        elif pathname == '/view/dual-task':
+            return [dual_task_graphs(), search_filter, filtered_display]
+        else:
+            return [home_layout(), search_filter, filtered_display]
 
 
 # Register all callbacks and pass data
 register_callbacks(app, {'frequency_df': frequency_df})
+
 
 if __name__ == '__main__':
     app.run_server(debug=True)
