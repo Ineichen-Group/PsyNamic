@@ -214,3 +214,4 @@ model/collected_results/*
 wandb/*
 log/*
 training_scripts/*
+archive/*
