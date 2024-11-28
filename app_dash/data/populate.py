@@ -1,105 +1,164 @@
-from sqlalchemy.orm import sessionmaker
-from datetime import datetime
-import random
+from datetime import datetime, timezone, timedelta
+import os
+import sys
 
-# Import the classes from your models
-from models import Paper, BatchRetrival, Token, Prediction, PredictionToken, engine
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
+from models import Paper, BatchRetrieval, Token, Prediction, PredictionToken
+import argparse
+import pandas as pd
+from settings import *
 
-# Create a session
-Session = sessionmaker(bind=engine)
-session = Session()
 
-# Function to create dummy batch retrieval
-def create_batch_retrieval():
-    return BatchRetrival(
-        date=datetime.utcnow(),
-        number_new_papers=random.randint(5, 20),  # Random number of papers
-        retrieval_time_needed=datetime.utcnow()
+parent_folder_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, parent_folder_path)
+
+
+def create_batch_retrieval(nr_new_papers: int, retrieval_time_needed: datetime):
+    return BatchRetrieval(
+        date=datetime.now(timezone.utc),
+        number_new_papers=nr_new_papers,
+        retrieval_time_needed=retrieval_time_needed
     )
 
-# Function to create dummy paper
-def create_paper(batch_retrival_id):
+
+def create_paper(
+        ID: int,
+        title: str,
+        abstract: str,
+        prediction_input: str,
+        key_terms: str,
+        doi: str, year: int,
+        authors: str,
+        link_to_fulltext: str,
+        link_to_pubmed: str,
+        retrieval_id: int
+):
     return Paper(
-        title=f"Sample Paper {random.randint(1, 100)}",
-        abstract="This is a dummy abstract of the paper.",
-        prediction_input="Sample Title + Abstract",
-        key_terms="NLP, Machine Learning",
-        doi=f"10.1234/doi_{random.randint(1, 10000)}",
-        year=random.randint(2000, 2024),
-        authors="John Doe, Jane Smith",
-        link_to_fulltext=None,
-        link_to_pubmed=None,
-        retrieval_id=batch_retrival_id
+        id=ID,
+        title=title,
+        abstract=abstract,
+        prediction_input=prediction_input,
+        key_terms=key_terms,
+        doi=doi,
+        year=year,
+        authors=authors,
+        link_to_fulltext=link_to_fulltext,
+        link_to_pubmed=link_to_pubmed,
+        retrieval_id=retrieval_id
     )
 
-# Function to create dummy tokens
-def create_tokens(paper_id):
+
+def create_tokens(token_list: list[str], ner_list: list[str], paper_id) -> list[Token]:
+    if len(token_list) != len(ner_list):
+        raise ValueError("Token and NER lists must have the same length")
     tokens = []
-    for i in range(random.randint(5, 15)):  # Random number of tokens
+    for i, (t, ner) in enumerate(zip(token_list, ner_list)):
         tokens.append(Token(
             paper_id=paper_id,
-            text=f"Token_{i}_{random.randint(1, 100)}",
-            ner_tag=None,  # You can set NER tags as needed
+            text=t,
+            ner_tag=ner,
             position_id=i
         ))
     return tokens
 
-# Function to create dummy predictions
-def create_predictions(paper_id):
-    predictions = []
-    for i in range(random.randint(1, 3)):  # Random number of predictions per paper
-        predictions.append(Prediction(
-            paper_id=paper_id,
-            task=f"Task_{random.randint(1, 5)}",  # Random task name
-            label=f"Label_{random.randint(1, 5)}",  # Random label
-            probability=random.random(),  # Random probability
-            model=f"Model_{random.randint(1, 3)}",  # Random model name
-            is_multilabel=random.choice([True, False])  # Random multilabel status
-        ))
-    return predictions
 
-# Function to create dummy prediction tokens
-def create_prediction_tokens(token_id, prediction_id):
+def create_predictions(paper_id: int, task: str, label: str, probability: float, model: str, is_multilabel: bool) -> list[Prediction]:
+    prediction = Prediction(
+        paper_id=paper_id,
+        task=task,
+        label=label,
+        probability=probability,
+        model=model,
+        is_multilabel=is_multilabel)
+    return prediction
+
+
+def create_prediction_tokens(token_id, prediction_id, weight):
     return PredictionToken(
         token_id=token_id,
         prediction_id=prediction_id,
-        weight=random.random()  # Random weight
+        weight=weight
     )
 
-# Insert dummy data into the database
-def insert_dummy_data():
-    # Create a batch retrieval record
-    batch = create_batch_retrival()
+
+def populate_db(prediction_file: str, studies_file: str):
+
+    # Using the settings.py file, create a connection to the database
+    DATABASE_URL = f'postgresql://{DATABASE_USER}:{DATABASE_PASSWORD}@{
+        DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}'
+    engine = create_engine(DATABASE_URL, echo=True)
+    SessionLocal = sessionmaker(bind=engine)
+    session = SessionLocal()
+
+    pred_data = pd.read_csv(prediction_file)
+    studies_data = pd.read_csv(studies_file)
+    nr_studies = len(studies_data)
+
+    # duration of the retrieval, set to 0 for now, but datetime.timedelta
+    retrieval_time_needed = timedelta(0)
+    # Convert timedelta to datetime
+    retrieval_time_needed_datetime = timedelta(0)
+    batch = create_batch_retrieval(nr_studies, retrieval_time_needed_datetime)
     session.add(batch)
-    session.commit()  # Commit the batch to get its ID
+    session.commit()
+    batch_id = batch.id
 
-    # Create dummy papers linked to the batch retrieval
-    for _ in range(batch.number_new_papers):
-        paper = create_paper(batch.id)
+    # replace the NaN values with empty strings
+    studies_data = studies_data.fillna('')
+
+    # iterate through the studies data
+    for i, row in studies_data.iterrows():
+        abstract = row['abstract']
+        title = row['title']
+        prediction_input = title + '^\n' + abstract
+
+        paper = create_paper(
+            ID=row['id'],
+            title=title,
+            abstract=abstract,
+            prediction_input=prediction_input,
+            key_terms=row['keywords'],
+            doi=row['doi'],
+            year=row['year'],
+            authors='',
+            link_to_fulltext='',
+            link_to_pubmed='',
+            retrieval_id=batch_id
+        )
         session.add(paper)
-        session.commit()  # Commit to get the paper's ID
+    session.commit()
 
-        # Create tokens for the paper
-        tokens = create_tokens(paper.id)
-        session.add_all(tokens)
-        session.commit()  # Commit tokens to get their IDs
+    for i, row in pred_data.iterrows():
+        pred = create_predictions(
+            paper_id=row['id'],
+            task=row['task'],
+            label=row['label'],
+            probability=row['probability'],
+            model=row['model'],
+            is_multilabel=row['is_multilabel']
+        )
+        session.add(pred)
+    session.commit()
 
-        # Create predictions for the paper
-        predictions = create_predictions(paper.id)
-        session.add_all(predictions)
-        session.commit()  # Commit predictions to get their IDs
+    session.close()
 
-        # Create prediction tokens for each token and prediction
-        for prediction in predictions:
-            for token in tokens:
-                prediction_token = create_prediction_tokens(token.id, prediction.id)
-                session.add(prediction_token)
-        session.commit()  # Commit prediction tokens
 
-    print("Dummy data inserted successfully!")
+# args parser with the two files
+def init_args_parser():
+    """Initialize and return the argument parser for the script."""
+    arg_parser = argparse.ArgumentParser(
+        description='Populate the database with data')
+    # add short and long arguments
+    arg_parser.add_argument('-p', '--predictions_file', type=str,
+                            help='Path to the predictions file', required=True)
+    arg_parser.add_argument('-s', '--studies_file', type=str,
+                            help='Path to the studies file', required=True)
+    return arg_parser
 
-# Run the insert dummy data function
-insert_dummy_data()
 
-# Close the session
-session.close()
+if __name__ == '__main__':
+    parser = init_args_parser()
+    args = parser.parse_args()
+    populate_db(args.predictions_file, args.studies_file)

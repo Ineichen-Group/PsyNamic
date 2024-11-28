@@ -51,7 +51,8 @@ def read_in_predictions(csv: str) -> pd.DataFrame:
                 'task': task,
                 'label': int_to_label[i],
                 'probability': prob,
-                'is_multilabel': is_multilabel
+                'is_multilabel': is_multilabel,
+                'model': 'init_test_models' # Adjust to real model name
             }
             new_df.append(pred_dict)
 

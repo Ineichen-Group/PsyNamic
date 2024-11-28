@@ -1,7 +1,14 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, Float, Boolean, ForeignKey, TIMESTAMP
+from sqlalchemy import create_engine, Column, Integer, String, Text, Float, Boolean, ForeignKey, TIMESTAMP, Interval
 from sqlalchemy.orm import relationship, declarative_base
-from sqlalchemy.ext.declarative import declared_attr
 from datetime import datetime
+import sys
+import os
+
+# Add the parent folder to the Python search path
+parent_folder_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, parent_folder_path)
+from settings import *
 
 # Base class for all models
 Base = declarative_base()
@@ -9,36 +16,35 @@ Base = declarative_base()
 
 class Paper(Base):
     __tablename__ = 'paper'
-
     # Primary Key
     id = Column(Integer, primary_key=True)
-
     # Columns
-    title = Column(String(255), nullable=False)
+    title = Column(Text, nullable=False)
     abstract = Column(Text, nullable=False)
     prediction_input = Column(Text, nullable=False)  # Title + Abstract
-    key_terms = Column(String(255), nullable=True)
-    doi = Column(String(255), nullable=True)
+    key_terms = Column(Text, nullable=True)
+    doi = Column(String(100), nullable=True)
     year = Column(Integer, nullable=True)
     authors = Column(String(255), nullable=True)
     link_to_fulltext = Column(String(255), nullable=True)
     link_to_pubmed = Column(String(255), nullable=True)
 
-    # Foreign Key to BatchRetrival
     retrieval_id = Column(Integer, ForeignKey(
-        'batch_retrival.id'), nullable=False)
+        'batch_retrieval.id'), nullable=False)
 
-    # Relationships
-    batch_retrival = relationship('BatchRetrival', back_populates='papers')
+    # Relationship to BatchRetrieval (Many-to-One)
+    batch_retrieval = relationship('BatchRetrieval', back_populates='papers')
+    # Relationship to Token (One-to-Many)
     tokens = relationship('Token', back_populates='paper')
+    # Relationship to Prediction (One-to-Many)
     predictions = relationship('Prediction', back_populates='paper')
 
     def __repr__(self):
         return f"<Paper(id={self.id}, title={self.title}, authors={self.authors})>"
 
 
-class BatchRetrival(Base):
-    __tablename__ = 'batch_retrival'
+class BatchRetrieval(Base):
+    __tablename__ = 'batch_retrieval'
 
     # Primary Key
     id = Column(Integer, primary_key=True)
@@ -46,13 +52,13 @@ class BatchRetrival(Base):
     # Columns
     date = Column(TIMESTAMP, default=datetime.utcnow)
     number_new_papers = Column(Integer, nullable=False)
-    retrieval_time_needed = Column(TIMESTAMP, nullable=False)
+    retrieval_time_needed = Column(Interval, nullable=False)
 
     # Relationship to Paper (One-to-Many)
-    papers = relationship('Paper', back_populates='batch_retrival')
+    papers = relationship('Paper', back_populates='batch_retrieval')
 
     def __repr__(self):
-        return f"<BatchRetrival(id={self.id}, date={self.date}, number_new_papers={self.number_new_papers})>"
+        return f"<BatchRetrieval(id={self.id}, date={self.date}, number_new_papers={self.number_new_papers})>"
 
 
 class Token(Base):
@@ -130,11 +136,15 @@ class PredictionToken(Base):
         return f"<PredictionToken(id={self.id}, weight={self.weight})>"
 
 
-# Create the database engine and session
-# Replace with your PostgreSQL URL
-DATABASE_URL = 'postgresql://username:password@localhost/mydatabase'
+def init_db():
+    # Names from the settings are used
+    DATABASE_URL = f'postgresql://{DATABASE_USER}:{DATABASE_PASSWORD}@{
+        DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}'
 
-engine = create_engine(DATABASE_URL, echo=True)
+    engine = create_engine(DATABASE_URL, echo=True)
 
-# Create the tables in the database
-Base.metadata.create_all(engine)
+    Base.metadata.create_all(engine)
+
+
+if __name__ == '__main__':
+    init_db()
