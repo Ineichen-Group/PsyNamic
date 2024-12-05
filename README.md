@@ -1,53 +1,43 @@
 # PsychNER
-Named entity recognition on litearture about psychedelic treatments of psychiatric conditions
+A project to automatically extract relevant information from abstracts of clincal studies about psychedelic treatments of psychiatric conditions.
+This includes named entity recognition and single-/multilabel classification via fine-tuned Bert-based models.
+
+This repository includes two submodule:
+.
+|-- PsyNamic-Webapp --> the webapp written in dash
+|-- PsyNamic-Prodigy --> the dockerized prodigy setup used for annotating data
 
 
-## Data Extraction
-The following NERs are being manually annotated:
-* Study type (Randomized-controlled trial (RCT), case report or case series)
-* Substance (LSD, psilocybin, mescaline, DMT, 5-MeO-DMT, MDMA, ketamine, ibogaine, and salvinorin A)
-* Application (disease being treated)
-* Number of participants
-* Sex of participants
-* Clinical trial phase
-* Adverse even(s)
-* Conclusion (positive, neutral, negative)
+## How to install
 
-Metadata:
-* doi
-* title
-* authors
-* publication year
-* journal
-* number of authors
+Either install this repository and the submodules in one go:
+```bash
+git clone --recurse-submodules git@github.com:Ineichen-Group/PsyNamic.git
+```
+or install the repos separaetly
+```bash
+git clone git@github.com:Ineichen-Group/PsyNamic.git
+git clone git@github.com:Ineichen-Group/PsyNamic-Prodigy.git
+git clone git@git@github.com:Ineichen-Group/PsyNamic-Webapp.git
+```
 
-## NER in (bio)medical domain
-### Encoder only architectures (BERT ect.)
-#### NeuroTrialNER (Doneva et al.)
-* Clinical Trials corpus with annotates named entities
-* 893 clinical trials
-* NE annoted in BIO format
-* BERT-based models vs. key terms lookup approaches
-* Models used: BERT-base-uncase, BioLinkBERT-base, BioBer-1.1, gpt-3.5-turbo and gpt-4
-* Fine-tuned Bert-based models on classifying BIO
-* Zero-shot with GPT
-* Finding synonyms via list of diseases and drugs
-* Replace abbreviations with their long forms via Schwartz-Hearst algorithm
+### Install web app
+Checkout the README of PsyNamic-Webapp repo: 
+[https://github.com/Ineichen-Group/PsyNamic-Webapp/README.md](https://github.com/Ineichen-Group/PsyNamic-Webapp/blob/ce8d57b2a49dfd9d7696f14ca4c4106fe481621f/README.md)
 
-### Decoder only architectures (GPT ect.)
-####  PromptNER
-* Add a set of entity definitions in addition to the standard few-shot prompt
-* Models: GPT3.5, GPT4, T5-Flan
+### Install prodigy
+Check out the `Makefile`.
 
-#### Improving Large Language Models for Clinical Named Entity Recognition via Prompt Engineering
-* Testing GPT-3.5 and GPT-4 for clinical named entity recognition
-* Comparison to NER with BioClinicalBert and traditional ML approach (CRF With word features, BoW)
-* Result: 
-    * Prompt Engineering improves GPT models, BioClinicalBert still better
-    * Generative models only recommended in very low-resource setting
-
-#### Inspire the Large Language Model by External Knowledge on BioMedical Named Entity Recognition
-
+## How to deal with submodules
+Keeping the reference up to date
+* Work within the submodules, commit and push
+* Update the references in the parent repository PsyNmiac
+```bash
+git submodule update --remote
+git add PsyNamic-Prodigy PsyNamic-Webapp
+git commit -m "Updated submodule references to the latest commit"
+git push origin main
+```
 
 ## Medical (L)LM and other methods
 Curated list medical LLM on Github: [Awesome Medical LLM](https://github.com/burglarhobbit/Awesome-Medical-Large-Language-Models)
@@ -69,21 +59,5 @@ Curated list medical LLM on Github: [Awesome Medical LLM](https://github.com/bur
 * Data Augmentation via pertubation
 * Ensemble methods with different Bert-based methods
 
-
 ### Models that already do Medical NER
 [Biomed NER](https://huggingface.co/d4data/biomedical-ner-all)
-
-### Setup
-* Preprocess Data
-    * Add special tokens [CLS] at beginning [SEP] at the end
-    * Tokenize the input
-    * Make sure to use the tokenized tokenizer(raw_datasets["train"][0]["tokens"], is_split_into_words=True)
-    * Truncate or PAD to have all equal size
-* Use models from HuggingFace
-* Use weights & biases to supervise training
-* Checkout what models to be used
-* Do some grid search
-
-
-## Prodigy
-### Input
