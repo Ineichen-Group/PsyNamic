@@ -7,3 +7,4 @@ pep8
 pylint
 sqlalchemy
 psycopg2-binary
+lxml
