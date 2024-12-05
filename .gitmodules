@@ -1,0 +1,6 @@
+[submodule "PsyNamic-Webapp"]
+	path = PsyNamic-Webapp
+	url = git@github.com:Ineichen-Group/PsyNamic-Webapp.git
+[submodule "PsyNamic-Prodigy"]
+	path = PsyNamic-Prodigy
+	url = git@github.com:Ineichen-Group/PsyNamic-Prodigy.git
