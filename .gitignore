@@ -215,3 +215,4 @@ wandb/*
 log/*
 training_scripts/*
 archive/*
+*env/*

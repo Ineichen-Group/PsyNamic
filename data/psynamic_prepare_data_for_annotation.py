@@ -90,7 +90,8 @@ def generate_subsample(data_file: str, n: int, annotation_log: bool = True, rand
     random_subset = random.sample(data, n)
     current_date = datetime.now().strftime('%Y%m%d')
     current_time = datetime.now().strftime('%H%M%S')
-    output_file = f'{PRODIGY_INPUTS_DIR}/psychedelic_study_{n}_{current_date}_{current_time}.jsonl'
+    output_file = f'{
+        PRODIGY_INPUTS_DIR}/psychedelic_study_{n}_{current_date}_{current_time}.jsonl'
 
     with open(output_file, 'w', encoding='utf-8') as f:
         for d in random_subset:
@@ -172,9 +173,8 @@ def remove_from_annotation_log(subsample: str) -> None:
 def readd_partial_annotation_log(partial_annotated: str) -> None:
     log_df = _get_most_recent_annotation_log()
     file_name = os.path.basename(partial_annotated)
-    # extract 250_20240423_113436 from prodigy_export_bernard_200_20240423_113436_20240713_171907.jsonl
-    input_file = 'psychedelic_study_' + \
-        '_'.join(file_name.split('_')[3:6]) + '.jsonl'
+    # extract 20240423_113436 from prodigy_export_bernard_200_20240423_113436_20240713_171907.jsonl
+    file_identifier = file_name.split('_')[4] + '_' + file_name.split('_')[5]
     # read in annotated records into a annoated_df
     annot_ct = 0
     not_annot_ct = 0
@@ -182,7 +182,7 @@ def readd_partial_annotation_log(partial_annotated: str) -> None:
         annotated_df = pd.DataFrame([json.loads(line) for line in infile])
         # iterate through log_df and check if record_id was annotated
         for index, row in log_df.iterrows():
-            if row['data_set'] == input_file:
+            if file_identifier in str(row['data_set']):
                 record_id = row['record_id']
                 # if record_id not annotated, set annotated to False and remove data_set
                 if record_id not in annotated_df['record_id'].values:
@@ -191,14 +191,15 @@ def readd_partial_annotation_log(partial_annotated: str) -> None:
                     not_annot_ct += 1
                 else:
                     annot_ct += 1
-    print(f'Annotated: {annot_ct}, Not Annotated & removed from log: {not_annot_ct}')
-    
+    print(f'Annotated: {annot_ct}, Not Annotated & removed from log: {
+          not_annot_ct}')
+
     # write new log
     current_date = datetime.now().strftime('%Y%m%d')
     new_log = f'annotation_log_{current_date}.csv'
     new_log_path = os.path.join(ANNOTATION_DIR, new_log)
     log_df.to_csv(new_log_path, index=False)
-           
+
 
 def annotation_progress() -> None:
     log_df = _get_most_recent_annotation_log()
@@ -297,9 +298,15 @@ def main():
     # file = 'prodigy_exports/prodigy_export_bernard_250_20240423_113436_20240713_171907.jsonl'
     # readd_partial_annotation_log(file)
     # annotation_progress()
-    
-    subsample = generate_subsample(cleaned_data, 250)
-    update_annotation_log(subsample)
+
+    # subsample = generate_subsample(cleaned_data, 250)
+    # update_annotation_log(subsample)
+    # annotation_progress()
+
+    readd_partial_annotation_log(
+        'prodigy_exports/prodigy_export_ben_120_20240523_195806_20241206_095404.jsonl')
+    readd_partial_annotation_log(
+        'prodigy_exports/prodigy_export_julia_110_20240423_113435_20240812_012727.jsonl')
     annotation_progress()
 
 
