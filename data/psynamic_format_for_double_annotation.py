@@ -26,8 +26,8 @@ unknown = set()
 files_to_double_annotate = [
     'data/prodigy_exports/prodigy_export_ben_100_20240411_20240416_162821.jsonl',
     'data/prodigy_exports/prodigy_export_ben_100_20240418_20240423_075953.jsonl',
-    'data/prodigy_exports/prodigy_export_julia_250_20240423_113435_20240812_012727.jsonl',
-    'data/prodigy_exports/prodigy_export_bernard_250_20240423_113436_20240713_171907.jsonl',
+    'data/prodigy_exports/prodigy_export_julia_110_20240423_113435_20240812_012727.jsonl',
+    'data/prodigy_exports/prodigy_export_bernard_52_20240423_113436_20240713_171907.jsonl',
     'data/prodigy_exports/prodigy_export_pia_250_20240423_113437_20240720_135743.jsonl',
 ]
 
