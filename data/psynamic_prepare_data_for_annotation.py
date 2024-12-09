@@ -208,6 +208,38 @@ def annotation_progress() -> None:
     print(f'Annotated: {annotated}/{total}')
 
 
+def add_missing_annotation_log() -> None:
+    all_studies = 'raw_data/asreview_dataset_all_Psychedelic Study.csv'
+    all_studies_df = pd.read_csv(all_studies)
+
+    log_df = _get_most_recent_annotation_log()
+    all_studies_df = all_studies_df[all_studies_df['included'] == 1]
+    add_data = []
+
+    for _, row in all_studies_df.iterrows():
+        record_id = row['record_id']
+        if record_id not in log_df['record_id'].values:
+            add_data.append(row)
+    new_data_df = prepare_data(pd.DataFrame(add_data))
+
+    # append new data to all_studies_df
+    all_cleaned = 'raw_data/dataset_relevant_cleaned.csv'
+    all_cleaned_df = pd.read_csv(all_cleaned)
+    all_cleaned_df = pd.concat([all_cleaned_df, new_data_df])
+    all_cleaned_df.to_csv(all_cleaned, index=False)
+
+    # add to annotation log
+    new_data_df['annotated'] = False
+    new_data_df['data_set'] = ''
+    new_data_df = new_data_df[['record_id', 'annotated', 'data_set']]
+    log_df = pd.concat([log_df, new_data_df])
+
+    # write new log
+    current_date = datetime.now().strftime('%Y%m%d')
+    new_log = f'annotation_log_{current_date}.csv'
+    new_log_path = os.path.join(ANNOTATION_DIR, new_log)
+    log_df.to_csv(new_log_path, index=False)
+
 def main():
 
     # Load the raw data and prepare it
@@ -303,11 +335,13 @@ def main():
     # update_annotation_log(subsample)
     # annotation_progress()
 
-    readd_partial_annotation_log(
-        'prodigy_exports/prodigy_export_ben_120_20240523_195806_20241206_095404.jsonl')
-    readd_partial_annotation_log(
-        'prodigy_exports/prodigy_export_julia_110_20240423_113435_20240812_012727.jsonl')
-    annotation_progress()
+    # readd_partial_annotation_log(
+    #     'prodigy_exports/prodigy_export_ben_120_20240523_195806_20241206_095404.jsonl')
+    # readd_partial_annotation_log(
+    #     'prodigy_exports/prodigy_export_julia_110_20240423_113435_20240812_012727.jsonl')
+    # annotation_progress()
+
+    add_missing_annotation_log()
 
 
 if __name__ == '__main__':
