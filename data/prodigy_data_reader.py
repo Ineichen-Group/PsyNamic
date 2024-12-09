@@ -23,14 +23,16 @@ FIXED_COLUMNS = ['id', 'text', 'annotator']
 
 
 class ProdigyDataReader:
-    def __init__(self, jsonl_path: str, annotator: str = None):
+    def __init__(self, jsonl_path: str, annotator: str = 'unkown') -> None:
         self.jsonl_path = jsonl_path
         self._check_path()
+        self.index = 0
 
         self.span_labels = set()
         self.nr_rejected = 0
         self._tasks = {}
         self._thematic_split = None
+        self._line_dicts = []
 
         # Used with abstract only appearing once
         self._id_to_class_label = {}
@@ -46,6 +48,7 @@ class ProdigyDataReader:
         self.df = self._initiate_df()
         self.rejected = []
 
+        self.ner_tags = set()
         self.ner_per_abstract = defaultdict(lambda: defaultdict(list))
 
         self._read_all_class()
@@ -53,6 +56,8 @@ class ProdigyDataReader:
         self._task_multilabel = {}
 
         self.df = self.replace_newlines(self.df)
+        # TODO: better solution for fixed columns
+        self.df[FIXED_COLUMNS[2]] = self.annotator
 
     def __iter__(self):
         return self
@@ -63,6 +68,7 @@ class ProdigyDataReader:
             self.index += 1
             return result
         else:
+            self.index = 0
             raise StopIteration
 
     def __len__(self):
@@ -140,7 +146,10 @@ class ProdigyDataReader:
             # subtract the fixed columns
             columns = list(self.df.columns)
             for fixed_col in FIXED_COLUMNS:
-                columns.remove(fixed_col)
+                try:
+                    columns.remove(fixed_col)
+                except ValueError:
+                    pass
             tasks = {}
             for col in columns:
                 task_group, labels = col.split(': ')
@@ -201,7 +210,27 @@ class ProdigyDataReader:
             new_dataframe = pd.DataFrame(task_filtered)
             return label_to_int, new_dataframe
 
+    def are_ids_in_df(self, id: list[int]) -> bool:
+        return all([i in self.df['id'].to_list() for i in id])
+
+    def remove_ids(self, ids: list[int]) -> None:
+        self.df = self.df[~self.df['id'].isin(ids)]
+
+    def write_jsonl(self, path: str=None) -> None:
+        # if path not given, overwrite the original file
+        if not path:
+            path = self.jsonl_path
+        with open(path, 'w', encoding='utf-8') as outfile:
+            for line_dict in self._line_dicts:
+                outfile.write(json.dumps(line_dict, ensure_ascii=False) + '\n')
+
+    @property
+    def ids(self) -> list[int]:
+        return self.df['id'].to_list()
+
     def get_ner_per_abstract(self, id: int, label: str = None) -> list[(str, str)]:
+        if id not in self.ids:
+            raise ValueError(f'Id {id} not found in dataframe')
         ners = []
         if label:
             for ner in self.ner_per_abstract[id][label]:
@@ -212,18 +241,68 @@ class ProdigyDataReader:
                     ners.append((' '.join(ner), label))
         return ners
 
-    def are_ids_in_df(self, id: list[int]) -> bool:
-        return all([i in self.df['id'].to_list() for i in id])
+    def get_text(self, id: int) -> str:
+        entry = self.df[self.df['id'] == id]
+        if entry.empty:
+            raise ValueError(f'Id {id} not found in dataframe')
+        else:
+            return self.df[self.df['id'] == id]['text'].values[0]
 
-    def remove_ids(self, ids: list[int]) -> None:
-        self.df = self.df[~self.df['id'].isin(ids)]
+    def get_label(self, id: int, task: str) -> list[str]:
+        self._is_valid_task(task)
+        entry = self.df[self.df['id'] == id]
+        if entry.empty:
+            raise ValueError(f'Id {id} not found in dataframe')
+        else:
+            labels = []
+            # find rows satrtswith task
+            for col in self.df.columns:
+                if col.startswith(task):
+                    label = col.split(': ')[1]
+                    if entry[col].values[0] == 1:
+                        labels.append(label)
+                        # if task is multilabel, return list of labels
+                        if not self._is_task_multi_label(task):
+                            return labels
+            else:
+                return labels
+
+    def get_labels(self, id: int) -> dict[str, list[str]]:
+        entry = self.df[self.df['id'] == id]
+        if entry.empty:
+            raise ValueError(f'Id {id} not found in dataframe')
+        else: 
+            labels = {}
+            for task in self.get_classification_tasks().keys():
+                labels[task] = self.get_label(id, task)
+            return labels
+
+    def get_ner(self, id: int):
+        entry = self.df[self.df['id'] == id]
+        if entry.empty:
+            raise ValueError(f'Id {id} not found in dataframe')
+        else:
+            # check if dict is empty
+            if not self.ner_per_abstract[id]:
+                raise ValueError(f'No NER data found for id {id}')
+            else:
+                return self.ner_per_abstract[id]
+
+    def get_ids_with_ner(self, ner: str) -> list[int]:
+        if not self.ner_tags:
+            raise ValueError('No NER data found in dataframe')
+        ids = []
+        for id in self.ner_per_abstract.keys():
+            for label in self.ner_per_abstract[id]:
+                if label == ner:
+                    ids.append(id)
+        return ids
 
     def _is_task_multi_label(self, task_name: str) -> bool:
         if self._is_valid_task(task_name):
             try:
                 return self._task_multilabel[task_name]
             except KeyError:
-
                 _, df = self.get_label_task_df(task_name)
                 for _, row in df.iterrows():
                     if len(row[task_name]) > 1:
@@ -255,6 +334,7 @@ class ProdigyDataReader:
             lines = []
             for line in infile:
                 line_dict = json.loads(line)
+                self._line_dicts.append(line_dict)
                 lines.append(line_dict)
                 # keep collecting all information until the next abstract
                 if self.has_thematic_split():
@@ -281,7 +361,8 @@ class ProdigyDataReader:
                     new_row['text'] = line_dict['text']
                     new_row['id'] = line_dict['record_id']
 
-                    if not class_ids and line_dict['answer'] == 'reject':
+                    # if not class_ids and line_dict['answer'] == 'reject':
+                    if line_dict['answer'] == 'reject':
                         rejected.append(line_dict['record_id'])
                     else:
                         for class_id in class_ids:
@@ -309,12 +390,18 @@ class ProdigyDataReader:
 
     def _read_all_ner(self) -> None:
         with open(self.jsonl_path, 'r', encoding='utf-8') as infile:
+            has_ner = False
             for line in infile:
                 line_dict = json.loads(line)
                 if line_dict['answer'] == 'reject':
                     continue
+                try:
+                    spans = line_dict['spans']
+                    has_ner = True
+                except KeyError:
+                    continue
+
                 tokens = line_dict['tokens']
-                spans = line_dict['spans']
                 id = line_dict['record_id']
                 # check if id already exists
                 for span in spans:
@@ -322,12 +409,16 @@ class ProdigyDataReader:
                         start = span['token_start']
                         end = span['token_end']
                         label = span['label']
+                        self.ner_tags.add(label)
                         self.span_labels.add(label)
                         ner_tokens = [tokens[i]['text']
                                       for i in range(start, end+1)]
                         self.ner_per_abstract[id][label].append(
                             ner_tokens)
-
+            
+            if not has_ner:
+                print(f'No NER data found in {self.jsonl_path}')
+    
     def _new_empty_row(self) -> dict:
         column_names = list(self.df.columns)
         return {col: 0 for col in column_names}
@@ -387,7 +478,7 @@ class ProdigyDataCollector():
         self._check_tasks()
         self._read_all()
         # add column with annotator to each df
-        
+
         self._check_duplicates()
 
     def __len__(self) -> int:
@@ -795,7 +886,8 @@ class ProdigyIAAHelper():
                         classes=labels).fit_transform(second_pred.to_numpy())
                     cm = multilabel_confusion_matrix(
                         first_pred_matrix, second_pred_matrix, labels=labels)
-                    iaa_str = f'Krippendorff\'s Alpha: {round(alpha, 2)}, CI: {round(confidence_interval, 2)}'
+                    iaa_str = f'Krippendorff\'s Alpha: {round(alpha, 2)}, CI: {
+                        round(confidence_interval, 2)}'
                     plot = self.plot_multilabel_confusion_matrix(
                         cm, list(int_to_label.values()), task, iaa_str)
 
@@ -839,7 +931,7 @@ class ProdigyIAAHelper():
                         cohen, ci = calculate_cohen_kappa_from_cfm_with_ci(cm)
 
                         plot = self.plot_confusion_matrix(
-                            cm, list(int_to_label.values()), task, f'{measure}: {round(cohen,2)}, CI: {round(ci,2)}')
+                            cm, list(int_to_label.values()), task, f'{measure}: {round(cohen, 2)}, CI: {round(ci, 2)}')
 
                         if save:
                             annotators = '_'.join(
