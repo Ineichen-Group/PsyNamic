@@ -73,10 +73,11 @@ Data used for training:
     * Training 2:
         - data/iaa/iaa_round1_50/iaa_resolution/prodigy_export_review_all_text_50_20240418_20240607_145354.jsonl
         - data/iaa/iaa_round2_40/iaa_resolution/prodigy_export_review_all_text_40_20240523_20240705_183405.jsonl
-        - data/prodigy_exports/prodigy_export_ben_95_20240423_113434
-        - data/prodigy_exports/prodigy_export_ben_24_20240425_152801_reordered
-        - data/prodigy_exports/prodigy_export_pia_250_20240730_095458_20240812_192652
-        - data/prodigy_export/prodigy_export_ben_582_double_annot_review_text_20240812_20241129_105310
+        - data/prodigy_exports/prodigy_export_ben_120_20240523_195806_20241206_095404.jsonl
+        - data/prodigy_exports/prodigy_export_ben_95_20240423_113434.jsonl
+        - data/prodigy_exports/prodigy_export_ben_24_20240425_152801_reorderedjsonl
+        - data/prodigy_exports/prodigy_export_pia_250_20240730_095458_20240812_192652jsonl
+        - data/prodigy_exports/prodigy_export_ben_582_double_annot_review_text_20240812_20241129_10531.jsonl
         Size: 50 + 40 + 95 + 24 + 250 + 582 = 1041
 
 

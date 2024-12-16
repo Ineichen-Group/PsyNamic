@@ -3,7 +3,7 @@ import os
 from collections import defaultdict
 from datetime import datetime
 from itertools import combinations
-from typing import Union
+from typing import Union, Literal
 import numpy as np
 from matplotlib.figure import Figure
 
@@ -17,19 +17,19 @@ from stride_utils.iaa import (calculate_cohen_kappa_from_cfm_with_ci,
                               interpret_alpha, interpret_kappa)
 from sklearn.preprocessing import MultiLabelBinarizer
 # Below has to be adjusted given prodigy iteration
-FIXED_COLUMNS = ['id', 'text', 'annotator']
-# FIXED_COLUMNS = ['id', 'text', 'annotation']
+FIXED_COLUMNS = ['id', 'text', 'annotator', 'source_file']
 # TODO: better solution for fixed columns
 
 
 class ProdigyDataReader:
-    def __init__(self, jsonl_path: str, annotator: str = 'unkown') -> None:
+    def __init__(self, jsonl_path: str, annotator: str = 'unkown', purpose = Literal['ner', 'class', 'both']) -> None:
         self.jsonl_path = jsonl_path
         self._check_path()
         self.index = 0
 
         self.span_labels = set()
         self.nr_rejected = 0
+        self.nr_total = 0
         self._tasks = {}
         self._thematic_split = None
         self._line_dicts = []
@@ -50,14 +50,20 @@ class ProdigyDataReader:
 
         self.ner_tags = set()
         self.ner_per_abstract = defaultdict(lambda: defaultdict(list))
-
-        self._read_all_class()
-        self._read_all_ner()
-        self._task_multilabel = {}
+        
+        self.purpose = purpose
+        if purpose == 'both':
+            self._read_all_class()
+            self._read_all_ner()
+        elif purpose == 'class':
+            self._read_all_class()
+        elif purpose == 'ner':
+            self._read_all_ner()
 
         self.df = self.replace_newlines(self.df)
         # TODO: better solution for fixed columns
         self.df[FIXED_COLUMNS[2]] = self.annotator
+        self.df[FIXED_COLUMNS[3]] = self.jsonl_path
 
     def __iter__(self):
         return self
@@ -74,8 +80,8 @@ class ProdigyDataReader:
     def __len__(self):
         return len(self.df)
 
-    def __getitem__(self, id: str):
-        return self.df[self.df['id'] == id]
+    def __getitem__(self, record_id: str):
+        return self.df[self.df['id'] == record_id]
 
     def __contains__(self, item: Union[int, list[int]]) -> bool:
         if isinstance(item, list):
@@ -84,6 +90,8 @@ class ProdigyDataReader:
             return item in self.df['id'].to_list()
 
     def has_thematic_split(self) -> bool:
+        ''' Check if the samples appear 3x times to annotate different tasks (grouped thematicall)'''
+
         if self._thematic_split is None:
             # Read in first three lines
             with open(self.jsonl_path, 'r', encoding='utf-8') as infile:
@@ -177,16 +185,11 @@ class ProdigyDataReader:
                     task_filtered[label] = self.df[col]
 
             task_filtered_df = pd.DataFrame(task_filtered)
-        return task_filtered_df
+            return task_filtered_df
 
     def get_label_task_df(self, task_name: str, label_to_int: Union[dict[str], None] = None) -> tuple[dict, pd.DataFrame]:
         if self._is_valid_task(task_name):
-            if label_to_int:
-                int_to_label = {index: label for index,
-                                label in enumerate(label_to_int.keys())}
-            else:
-                int_to_label = {index: label for index,
-                                label in enumerate(self._tasks[task_name])}
+            if not label_to_int:
                 label_to_int = {label: index for index,
                                 label in enumerate(self._tasks[task_name])}
             task_filtered = {}
@@ -210,13 +213,16 @@ class ProdigyDataReader:
             new_dataframe = pd.DataFrame(task_filtered)
             return label_to_int, new_dataframe
 
-    def are_ids_in_df(self, id: list[int]) -> bool:
-        return all([i in self.df['id'].to_list() for i in id])
+    def are_ids_in_df(self, record_ids: list[int]) -> bool:
+        '''Check if all record ids are in the dataframe'''
+        return all([i in self.df['id'].to_list() for i in record_ids])
 
     def remove_ids(self, ids: list[int]) -> None:
+        '''Remove rows with the given ids'''
         self.df = self.df[~self.df['id'].isin(ids)]
 
-    def write_jsonl(self, path: str=None) -> None:
+    def write_jsonl(self, path: str = None) -> None:
+        '''Write the dataframe to a jsonl file'''
         # if path not given, overwrite the original file
         if not path:
             path = self.jsonl_path
@@ -228,31 +234,33 @@ class ProdigyDataReader:
     def ids(self) -> list[int]:
         return self.df['id'].to_list()
 
-    def get_ner_per_abstract(self, id: int, label: str = None) -> list[(str, str)]:
-        if id not in self.ids:
-            raise ValueError(f'Id {id} not found in dataframe')
+    def get_ner_per_abstract(self, record_id: int, label: str = None) -> list[(str, str)]:
+        if record_id not in self.ids:
+            raise ValueError(f'Id {record_id} not found in dataframe')
         ners = []
         if label:
-            for ner in self.ner_per_abstract[id][label]:
+            for ner in self.ner_per_abstract[record_id][label]:
                 ners.append((' '.join(ner), label))
         else:
-            for label in self.ner_per_abstract[id]:
-                for ner in self.ner_per_abstract[id][label]:
+            for label in self.ner_per_abstract[record_id]:
+                for ner in self.ner_per_abstract[record_id][label]:
                     ners.append((' '.join(ner), label))
         return ners
 
-    def get_text(self, id: int) -> str:
-        entry = self.df[self.df['id'] == id]
+    def get_text(self, record_id: int) -> str:
+        '''Get the abstract of a given record id'''
+        entry = self.df[self.df['id'] == record_id]
         if entry.empty:
-            raise ValueError(f'Id {id} not found in dataframe')
+            raise ValueError(f'Id {record_id} not found in dataframe')
         else:
-            return self.df[self.df['id'] == id]['text'].values[0]
+            return self.df[self.df['id'] == record_id]['text'].values[0]
 
-    def get_label(self, id: int, task: str) -> list[str]:
+    def get_label(self, record_id: int, task: str) -> list[str]:
+        '''Get the label of a given record id and task'''
         self._is_valid_task(task)
-        entry = self.df[self.df['id'] == id]
+        entry = self.df[self.df['id'] == record_id]
         if entry.empty:
-            raise ValueError(f'Id {id} not found in dataframe')
+            raise ValueError(f'Id {record_id} not found in dataframe')
         else:
             labels = []
             # find rows satrtswith task
@@ -264,41 +272,44 @@ class ProdigyDataReader:
                         # if task is multilabel, return list of labels
                         if not self._is_task_multi_label(task):
                             return labels
-            else:
-                return labels
-
-    def get_labels(self, id: int) -> dict[str, list[str]]:
-        entry = self.df[self.df['id'] == id]
-        if entry.empty:
-            raise ValueError(f'Id {id} not found in dataframe')
-        else: 
-            labels = {}
-            for task in self.get_classification_tasks().keys():
-                labels[task] = self.get_label(id, task)
             return labels
 
-    def get_ner(self, id: int):
-        entry = self.df[self.df['id'] == id]
+    def get_labels(self, record_id: int) -> dict[str, list[str]]:
+        '''Get all labels of a given record id'''
+        entry = self.df[self.df['id'] == record_id]
         if entry.empty:
-            raise ValueError(f'Id {id} not found in dataframe')
+            raise ValueError(f'Id {record_id} not found in dataframe')
+        else:
+            labels = {}
+            for task in self.get_classification_tasks().keys():
+                labels[task] = self.get_label(record_id, task)
+            return labels
+
+    def get_ner(self, record_id: int):
+        '''Get NER data of a given record id'''
+        entry = self.df[self.df['id'] == record_id]
+        if entry.empty:
+            raise ValueError(f'Id {record_id} not found in dataframe')
         else:
             # check if dict is empty
-            if not self.ner_per_abstract[id]:
-                raise ValueError(f'No NER data found for id {id}')
+            if not self.ner_per_abstract[record_id]:
+                raise ValueError(f'No NER data found for id {record_id}')
             else:
-                return self.ner_per_abstract[id]
+                return self.ner_per_abstract[record_id]
 
-    def get_ids_with_ner(self, ner: str) -> list[int]:
+    def get_ids_with_ner(self, ner_label: str) -> list[int]:
+        '''Get all record ids where a specific NER label is present'''
         if not self.ner_tags:
             raise ValueError('No NER data found in dataframe')
-        ids = []
-        for id in self.ner_per_abstract.keys():
-            for label in self.ner_per_abstract[id]:
-                if label == ner:
-                    ids.append(id)
-        return ids
+        record_ids = []
+        for record_id in self.ner_per_abstract.keys():
+            for label in self.ner_per_abstract[record_id]:
+                if label == ner_label:
+                    record_ids.append(record_id)
+        return record_ids
 
     def _is_task_multi_label(self, task_name: str) -> bool:
+        '''Check if a task is multi-label'''
         if self._is_valid_task(task_name):
             try:
                 return self._task_multilabel[task_name]
@@ -312,9 +323,10 @@ class ProdigyDataReader:
                 return False
 
     def _is_valid_task(self, task_name: str) -> Union[bool, None]:
-        if not task_name in self.get_classification_tasks().keys():
+        '''Check if a task actually exists in data'''
+        if not task_name in self.get_classification_tasks():
             raise ValueError(
-                f'Invalid task name, options are ´{self.get_classification_tasks().keys()}´')
+                f"Invalid task name ´{task_name}´, options are ´{self.get_classification_tasks().keys()}´")
         else:
             return True
 
@@ -322,7 +334,7 @@ class ProdigyDataReader:
         class_labels = ['id', 'text']
         label_mapping = self.get_prodigy_label_map()
         if self.has_thematic_split():
-            for thematic, thematic_label_mapping in label_mapping.items():
+            for _, thematic_label_mapping in label_mapping.items():
                 class_labels += list(thematic_label_mapping.values())
         else:
             class_labels += list(label_mapping.values())
@@ -333,6 +345,7 @@ class ProdigyDataReader:
         with open(self.jsonl_path, 'r', encoding='utf-8') as infile:
             lines = []
             for line in infile:
+
                 line_dict = json.loads(line)
                 self._line_dicts.append(line_dict)
                 lines.append(line_dict)
@@ -341,11 +354,14 @@ class ProdigyDataReader:
                     if len(lines) < 3:
                         continue
                     else:
+                        self.nr_total += 1
                         # check if the three lines are from the same abstract
                         ids = [line['record_id'] for line in lines]
                         if len(set(ids)) != 1:
                             raise ValueError(
                                 f'Thematically split information about abstract is not in order; i.e. different ids have been found:  {ids}')
+                else:
+                    self.nr_total += 1
 
                 new_row = self._new_empty_row()
                 rejected = []
@@ -361,7 +377,6 @@ class ProdigyDataReader:
                     new_row['text'] = line_dict['text']
                     new_row['id'] = line_dict['record_id']
 
-                    # if not class_ids and line_dict['answer'] == 'reject':
                     if line_dict['answer'] == 'reject':
                         rejected.append(line_dict['record_id'])
                     else:
@@ -383,7 +398,6 @@ class ProdigyDataReader:
                 # reset for next abstract
                 lines = []
                 rejected = []
-
         self.df = pd.concat([self.df, pd.DataFrame(all_rows)])
         # reorder rows according to the id
         self.df = self.df.sort_values(by='id')
@@ -401,7 +415,7 @@ class ProdigyDataReader:
                 except KeyError:
                     continue
 
-                tokens = line_dict['tokens']
+                record_id = line_dict['tokens']
                 id = line_dict['record_id']
                 # check if id already exists
                 for span in spans:
@@ -411,14 +425,14 @@ class ProdigyDataReader:
                         label = span['label']
                         self.ner_tags.add(label)
                         self.span_labels.add(label)
-                        ner_tokens = [tokens[i]['text']
+                        ner_tokens = [record_id[i]['text']
                                       for i in range(start, end+1)]
                         self.ner_per_abstract[id][label].append(
                             ner_tokens)
-            
+
             if not has_ner:
                 print(f'No NER data found in {self.jsonl_path}')
-    
+
     def _new_empty_row(self) -> dict:
         column_names = list(self.df.columns)
         return {col: 0 for col in column_names}
@@ -426,7 +440,7 @@ class ProdigyDataReader:
     def _check_order(self) -> None:
         ordered_file = self.jsonl_path.replace('.jsonl', '_reordered.jsonl')
         records = {}
-        with open(self.jsonl_path, 'r') as infile:
+        with open(self.jsonl_path, 'r', encoding='utf-8') as infile:
             for line in infile:
                 entry = json.loads(line)
                 record_id = entry['record_id']
@@ -444,7 +458,7 @@ class ProdigyDataReader:
         sorted_record_ids = sorted(records.keys())
 
         # Write the sorted entries to the output JSONL file
-        with open(ordered_file, 'w') as outfile:
+        with open(ordered_file, 'w', encoding='utf-8') as outfile:
             for record_id in sorted_record_ids:
                 for entry in records[record_id]:
                     outfile.write(json.dumps(entry, ensure_ascii=False) + '\n')
@@ -465,46 +479,53 @@ class ProdigyDataReader:
 
 
 class ProdigyDataCollector():
-    def __init__(self, list_of_files: list[str], annotators: list[str]) -> None:
+    def __init__(self, list_of_files: list[str], annotators: list[str], expert_annotator='', purposes: list[str] = None) -> None:
+        self.expert_annotator = expert_annotator
         self.prodigy_files = list_of_files
         self.prodigy_readers = []
-        for file, name in zip(list_of_files, annotators):
-            prodigy_reader = ProdigyDataReader(file, name)
+        if not purposes:
+            purposes = ['both'] * len(list_of_files)
+        for file, name, purpose in zip(list_of_files, annotators, purposes):
+            prodigy_reader = ProdigyDataReader(file, name, purpose)
             self.prodigy_readers.append(prodigy_reader)
 
         for reader in self.prodigy_readers:
             reader.df['annotator'] = reader.annotator
         self.tasks = {}
-        self._check_tasks()
+        self.duplicates = []
+
+        self._check_tasks([reader for reader in self.prodigy_readers if reader.purpose == 'class'] + [reader for reader in self.prodigy_readers if reader.purpose == 'both'])
         self._read_all()
-        # add column with annotator to each df
 
         self._check_duplicates()
 
     def __len__(self) -> int:
         return len(self.df)
 
-    def __getitem__(self, id: str) -> pd.DataFrame:
-        return self.df[self.df['id'] == id]
+    def __getitem__(self, record_id: str) -> pd.DataFrame:
+        return self.df[self.df['id'] == record_id]
 
-    def _read_all(self) -> None:
-        self.df = pd.concat([reader.df for reader in self.prodigy_readers])
+    def _read_all(self) -> None:  
+        self.df = pd.concat([reader.df for reader in self.prodigy_readers if reader.purpose == 'class' or reader.purpose == 'both'])
         # merge all ner_per_abstract dictionaries
         self.ner_per_abstract = {}
         self.span_labels = set()
         for reader in self.prodigy_readers:
-            self.ner_per_abstract.update(reader.ner_per_abstract)
-            self.span_labels = self.span_labels.union(reader.span_labels)
+            if reader.purpose == 'ner' or reader.purpose == 'both':
+                self.ner_per_abstract.update(reader.ner_per_abstract)
+                self.span_labels = self.span_labels.union(reader.span_labels)
 
-    def _check_tasks(self) -> None:
+    def _check_tasks(self, readers: list[ProdigyDataReader]) -> None:
         # check if all tasks are the same
-        tasks_first = self.prodigy_readers[0].get_classification_tasks()
-        for reader in self.prodigy_readers[1:]:
+        tasks_first = readers[0].get_classification_tasks()
+        for reader in readers[1:]:
             tasks = reader.get_classification_tasks()
             if tasks != tasks_first:
+                print(tasks)
+                print(tasks_first)
                 print(self.compare_dictionaries(tasks, tasks_first))
                 raise ValueError(
-                    f'Tasks are not the same in {reader.jsonl_path} and {self.prodigy_readers[0].jsonl_path}')
+                    f'Tasks are not the same in {reader.jsonl_path} and {readers[0].jsonl_path}')
         self.tasks = tasks_first
 
     @staticmethod
@@ -542,9 +563,16 @@ class ProdigyDataCollector():
                     f'Same sample has been annotated by same annotator: {duplicates_annotator}')
             else:
                 duplicate_ids = list(duplicates['id'].unique())
-                for reader in self.prodigy_readers:
-                    if duplicate_ids in reader and reader.annotator != 'Ben':
-                        reader.remove_ids(duplicate_ids)
+                if not self.expert_annotator:
+                    raise ValueError(
+                        f'Duplicates found and no expert annotator specified. Please implement a solution for duplicates')
+                else:
+                    for id in duplicate_ids:
+                        for reader in self.prodigy_readers:
+                            if id in reader:
+                                if reader.annotator != self.expert_annotator:
+                                    reader.remove_ids([id])
+                self.duplicates = duplicate_ids
                 self._read_all()
         # drop annotator column
         self.df = self.df.drop(columns='annotator')
@@ -585,6 +613,10 @@ class ProdigyDataCollector():
             self._plot_task_dist(task_freq, x_label)
 
         if save_path:
+            # check if it's file or folder
+            if os.path.isdir(save_path):
+                save_path = os.path.join(
+                    save_path, f'{datetime.now().strftime("%Y%m%d")}_task_dist.png')
             plt.savefig(save_path, bbox_inches='tight')
             plt.close()
         else:
@@ -625,18 +657,20 @@ class ProdigyDataCollector():
             return True
 
     def is_multilabel(self, task_name: str) -> bool:
+        readers = [reader for reader in self.prodigy_readers if reader.purpose == 'class' or reader.purpose == 'both']
         if self._is_valid_task(task_name):
-            for reader in self.prodigy_readers:
+            for reader in readers:
                 # if at least one reader has a multi-label task, return True
                 if reader._is_task_multi_label(task_name):
                     return True
             return False
 
     def get_label_task_df(self, task: str) -> tuple[dict[int, str], pd.DataFrame]:
+        readers = [reader for reader in self.prodigy_readers if reader.purpose == 'class' or reader.purpose == 'both']
         if self._is_valid_task(task):
-            label_to_int, task_df = self.prodigy_readers[0].get_label_task_df(
+            label_to_int, task_df = readers[0].get_label_task_df(
                 task)
-            for reader in self.prodigy_readers[1:]:
+            for reader in readers[1:]:
                 label_to_int, reader_task_df = reader.get_label_task_df(
                     task, label_to_int)
                 task_df = pd.concat([task_df, reader_task_df])
@@ -648,10 +682,11 @@ class ProdigyDataCollector():
             return label_to_int, task_df
 
     def get_onehot_task_df(self, task_name: str) -> pd.DataFrame:
+        readers = [reader for reader in self.prodigy_readers if reader.purpose == 'class' or reader.purpose == 'both']
         if self._is_valid_task(task_name):
-            task_filtered_df = self.prodigy_readers[0].get_onehot_task_df(
+            task_filtered_df = readers[0].get_onehot_task_df(
                 task_name)
-            for reader in self.prodigy_readers[1:]:
+            for reader in readers[1:]:
                 reader_task_df = reader.get_onehot_task_df(task_name)
                 task_filtered_df = pd.concat(
                     [task_filtered_df, reader_task_df])
@@ -693,66 +728,128 @@ class ProdigyDataCollector():
             self._plot_task_dist(task_freq, f'Nr of labels for {x_label}')
 
         if save_path:
+            # check if it's file or folder
+            if os.path.isdir(save_path):
+                save_path = os.path.join(
+                    save_path, f'{datetime.now().strftime("%Y%m%d")}_nr_dist.png')
             plt.savefig(save_path, bbox_inches='tight')
             plt.close()
         else:
             plt.show()
 
-    def get_ner_per_abstract(self, id: int, label: str = None) -> list[(str, str)]:
+    def get_ner_per_abstract(self, record_id: int, label: str = None) -> list[(str, str)]:
         ners = []
         if label:
-            for ner in self.ner_per_abstract[id][label]:
+            for ner in self.ner_per_abstract[record_id][label]:
                 ners.append((' '.join(ner), label))
         else:
-            for label in self.ner_per_abstract[id]:
-                for ner in self.ner_per_abstract[id][label]:
+            for label in self.ner_per_abstract[record_id]:
+                for ner in self.ner_per_abstract[record_id][label]:
                     ners.append((' '.join(ner), label))
         return ners
 
-    def get_ner_stats(self):
-        # Report entities frequency of NER (avg. per abstract)
-        nr_abstracts = len(self)
-        nr_total_entities = 0
-        for abstract in self.ner_per_abstract.values():
-            for entity in abstract.values():
-                nr_total_entities += len(entity)
-        avg_nr_entities_per_abstract = nr_total_entities / nr_abstracts
+    def get_ner_stats(self, save_path: str = None) -> None:
+        """
+        Report entities frequency of NER (avg. per abstract), 
+        entities frequency per label, and average NER length.
 
-        # Report entities frequency of NER (avg. per abstract per label)
-        avg_ner_per_abstract_per_label = {}
-        nr_ner_per_label = {}
-        for label in self.span_labels:
-            nr_entities = 0
+        Args:
+            save_path (str, optional): Path to save the report. Defaults to None.
+        """
+        report_lines = []
+        if len(self.ner_per_abstract) > 0:
+            nr_abstracts = len(self)
+            nr_total_entities = 0
+            nr_abstracts_without_ner = 0
+
             for abstract in self.ner_per_abstract.values():
-                if label in abstract:
-                    nr_entities += len(abstract[label])
-            avg_ner_per_abstract_per_label[label] = nr_entities / nr_abstracts
-            nr_ner_per_label[label] = nr_entities
+                for entity in abstract.values():
+                    if len(entity) == 0:
+                        nr_abstracts_without_ner += 1
+                    nr_total_entities += len(entity)
 
-        # Report average NER length
-        avg_ner_length_per_label = {}
-        for label in self.span_labels:
-            nr_entities = 0
-            total_length = 0
-            for abstract in self.ner_per_abstract.values():
-                if label in abstract:
-                    for entity in abstract[label]:
-                        total_length += len(entity)
-                        nr_entities += 1
-            avg_ner_length_per_label[label] = total_length / nr_entities
+            avg_nr_entities_per_abstract = nr_total_entities / nr_abstracts
 
-        # Pretty print
-        print('Total number of entities per label:')
-        for label, nr in nr_ner_per_label.items():
-            print(f'\t {label}: {nr}')
-        print(
-            f'Average number of entities per abstract: {avg_nr_entities_per_abstract}')
-        print('Average number of entities per abstract per label:')
-        for label, avg in avg_ner_per_abstract_per_label.items():
-            print(f'\t {label}: {avg}')
-        print('Average length of entities per label:')
-        for label, avg in avg_ner_length_per_label.items():
-            print(f'\t {label}: {avg}')
+            avg_ner_per_abstract_per_label = {}
+            nr_ner_per_label = {}
+
+            for label in self.span_labels:
+                nr_entities = 0
+                for abstract in self.ner_per_abstract.values():
+                    if label in abstract:
+                        nr_entities += len(abstract[label])
+                avg_ner_per_abstract_per_label[label] = nr_entities / nr_abstracts
+                nr_ner_per_label[label] = nr_entities
+
+            avg_ner_length_per_label = {}
+
+            for label in self.span_labels:
+                nr_entities = 0
+                total_length = 0
+                for abstract in self.ner_per_abstract.values():
+                    if label in abstract:
+                        for entity in abstract[label]:
+                            total_length += len(entity)
+                            nr_entities += 1
+                avg_ner_length_per_label[label] = total_length / nr_entities
+
+            # Prepare the report
+            report_lines.append('Total number of entities per label:')
+            for label, nr in nr_ner_per_label.items():
+                report_lines.append(f'\t {label}: {nr}')
+
+            report_lines.append(f'Average number of entities per abstract: {
+                                avg_nr_entities_per_abstract}')
+
+            report_lines.append(
+                'Average number of entities per abstract per label:')
+            for label, avg in avg_ner_per_abstract_per_label.items():
+                report_lines.append(f'\t {label}: {avg}')
+
+            report_lines.append('Average length of entities per label:')
+            for label, avg in avg_ner_length_per_label.items():
+                report_lines.append(f'\t {label}: {avg}')
+            
+            report_lines.append(f'Number of abstracts without NER: {nr_abstracts_without_ner}')
+        else:
+            report_lines.append('No NER data found in the dataset')
+        # Save to file or print
+        if save_path:
+            if os.path.isdir(save_path):
+                save_path = os.path.join(
+                    save_path, f'{datetime.now().strftime("%Y%m%d")}_ner_stats.txt')
+            with open(save_path, 'w', encoding='utf-8') as file:
+                file.write('\n'.join(report_lines))
+        else:
+            for line in report_lines:
+                print(line)
+
+    def get_nr_annot_stats(self, save_path: str = None) -> None:
+        nr_rejected = 0
+        for reader in self.prodigy_readers:
+            nr_rejected += reader.nr_rejected
+        nr_total = sum([reader.nr_total for reader in self.prodigy_readers])
+
+        # print or save the number of annotations and rejected samples in total
+        report_lines = []
+        report_lines.append(
+            f'Total number of annotations: {nr_total}')
+        report_lines.append(f'Total number of rejected samples: {nr_rejected}')
+        report_lines.append(
+            f'Total number of valid annotations:  {len(self.df)}')
+        report_lines.append(f'Total number of duplicates: {
+                            len(self.duplicates)}')
+        report_lines.append(f'Duplicates: {self.duplicates}')
+        if save_path:
+            # check if it's file or folder
+            if os.path.isdir(save_path):
+                save_path = os.path.join(
+                    save_path, f'{datetime.now().strftime("%Y%m%d")}_nr_stats.txt')
+            with open(save_path, 'w', encoding='utf-8') as file:
+                file.write('\n'.join(report_lines))
+        else:
+            for line in report_lines:
+                print(line)
 
 
 class ProdigyIAAHelper():
@@ -780,7 +877,7 @@ class ProdigyIAAHelper():
 
     def _inital_log(self):
         date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(self.log, 'w') as f:
+        with open(self.log, 'w', encoding='utf-8') as f:
             f.write('Log file for IAA calculations\n')
             f.write(f'Created at {date}\n')
             f.write('Datafiles used:\n')
@@ -803,7 +900,7 @@ class ProdigyIAAHelper():
         print(f'Not agreed rejected: {not_agreed_rejected}')
 
         # write to log
-        with open(self.log, 'a') as f:
+        with open(self.log, 'a', encoding='utf-8') as f:
             f.write(f'Agreed rejected: {agreed_rejected}\n')
             f.write(f'Not agreed rejected: {not_agreed_rejected}\n')
 

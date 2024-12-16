@@ -3,6 +3,13 @@ from collections import OrderedDict
 import os
 import random
 
+
+# Script to prepare several prodigy exports for double annotation. The script includes the following steps:
+# - Standardize the labels which changed with different versions of the annotation guidelines
+# - Dealing with the fact that some samples appear three times in a row and others only once (due to different annotation setup)
+# - Export all data in one file in random order
+
+
 synonyms = {
     'substance: ketamine': 'substances: ketamine',
     'substance: ibogaine': 'substances: ibogaine',
@@ -13,7 +20,6 @@ synonyms = {
     'substance: lsd': 'substances: lsd',
     'substance: 5-meo-dmt': 'substances: 5-meo-dmt',
     'substance: psilocybin': 'substances: psilocybin',
-    'substance: combination therapy': 'substances: combination therapy',
     'conclusion: negative': 'study conclusion: negative',
     'conclusion: positive': 'study conclusion: positive',
     'conclusion: not applicable': 'study conclusion: not applicable',

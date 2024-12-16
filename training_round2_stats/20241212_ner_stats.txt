@@ -1,0 +1,13 @@
+Total number of entities per label:
+	 Application area: 1271
+	 Dosage: 931
+	 Application: 330
+Average number of entities per abstract: 2.6347554630593133
+Average number of entities per abstract per label:
+	 Application area: 1.3225806451612903
+	 Dosage: 0.9687825182101977
+	 Application: 0.3433922996878252
+Average length of entities per label:
+	 Application area: 2.2753737214791503
+	 Dosage: 2.9237379162191193
+	 Application: 1.887878787878788
