@@ -1,0 +1,6 @@
+Total number of annotations: 458
+Total number of rejected samples: 24
+Total number of valid annotations:  429
+Total number of duplicates: 5
+Duplicates: [1216, 2516, 3728, 5794, 6684]
+Rejected samples: [293, 687, 734, 809, 1600, 1736, 2026, 2269, 2675, 2859, 3722, 3866, 4031, 4129, 4524, 4670, 4953, 5895, 5936, 7110, 7591, 7876, 8977, 9083]
