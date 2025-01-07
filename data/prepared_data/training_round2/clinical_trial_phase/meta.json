@@ -1,0 +1,17 @@
+{
+    "Task": "PsyNamicMultiLabel",
+    "Date": "20250107",
+    "Int_to_label": {
+        "0": "Phase 2",
+        "1": "Phase 4",
+        "2": "Phase 1",
+        "3": "Not Applicable",
+        "4": "Unknown",
+        "5": "Phase 3"
+    },
+    "Train_size": 769,
+    "Use_val": true,
+    "Is_multilabel": true,
+    "Test_size": 96,
+    "Val_size": 95
+}

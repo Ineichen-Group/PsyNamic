@@ -1,0 +1,27 @@
+{
+    "Task": "PsyNamicMultiLabel",
+    "Date": "20250107",
+    "Int_to_label": {
+        "0": "5-MeO-DMT",
+        "1": "Analogue",
+        "2": "Ketamine",
+        "3": "Psychedelic mushrooms",
+        "4": "Psilocybin",
+        "5": "DMT",
+        "6": "MDMA",
+        "7": "Salvinorin A",
+        "8": "Ayahuasca",
+        "9": "R-Ketamine",
+        "10": "LSD",
+        "11": "Mescaline",
+        "12": "S-Ketamine",
+        "13": "Combination Therapy",
+        "14": "Ibogaine",
+        "15": "Unknown"
+    },
+    "Train_size": 770,
+    "Use_val": true,
+    "Is_multilabel": true,
+    "Test_size": 95,
+    "Val_size": 95
+}

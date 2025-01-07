@@ -1,0 +1,15 @@
+{
+    "Task": "PsyNamicMultiLabel",
+    "Date": "20250107",
+    "Int_to_label": {
+        "0": "Adult (≥18 years)",
+        "1": "Not applicable",
+        "2": "Unknown",
+        "3": "Pediatric (< 18 years old)"
+    },
+    "Train_size": 768,
+    "Use_val": true,
+    "Is_multilabel": true,
+    "Test_size": 98,
+    "Val_size": 95
+}

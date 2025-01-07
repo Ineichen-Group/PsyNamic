@@ -29,10 +29,12 @@ class ProdigyDataReader:
 
         self.span_labels = set()
         self.nr_rejected = 0
+        self.rejected = []
         self.nr_total = 0
         self._tasks = {}
         self._thematic_split = None
         self._line_dicts = []
+        self._task_multilabel = {}
 
         # Used with abstract only appearing once
         self._id_to_class_label = {}
@@ -46,7 +48,7 @@ class ProdigyDataReader:
             self._check_order()
 
         self.df = self._initiate_df()
-        self.rejected = []
+        
 
         self.ner_tags = set()
         self.ner_per_abstract = defaultdict(lambda: defaultdict(list))
@@ -64,6 +66,9 @@ class ProdigyDataReader:
         # TODO: better solution for fixed columns
         self.df[FIXED_COLUMNS[2]] = self.annotator
         self.df[FIXED_COLUMNS[3]] = self.jsonl_path
+    
+    def __str__(self):
+        return f'Prodigy Data Reader based on {self.jsonl_path}'
 
     def __iter__(self):
         return self
@@ -185,6 +190,8 @@ class ProdigyDataReader:
                     task_filtered[label] = self.df[col]
 
             task_filtered_df = pd.DataFrame(task_filtered)
+            # remove all rows where no label was found, all zeros
+            task_filtered_df = task_filtered_df[(task_filtered_df.drop(columns=FIXED_COLUMNS) != 0).any(axis=1)]
             return task_filtered_df
 
     def get_label_task_df(self, task_name: str, label_to_int: Union[dict[str], None] = None) -> tuple[dict, pd.DataFrame]:
@@ -211,6 +218,9 @@ class ProdigyDataReader:
                 task_filtered[task_name].append(labels)
 
             new_dataframe = pd.DataFrame(task_filtered)
+            # remove all rows where no label was found
+            new_dataframe = new_dataframe[new_dataframe[task_name].apply(
+                len) > 0]
             return label_to_int, new_dataframe
 
     def are_ids_in_df(self, record_ids: list[int]) -> bool:
@@ -572,14 +582,37 @@ class ProdigyDataCollector():
                             if id in reader:
                                 if reader.annotator != self.expert_annotator:
                                     reader.remove_ids([id])
-                self.duplicates = duplicate_ids
+                self.duplicates = sorted(duplicate_ids)
                 self._read_all()
         # drop annotator column
         self.df = self.df.drop(columns='annotator')
 
     @property
     def nr_rejected(self) -> int:
-        return sum([reader.nr_rejected for reader in self.prodigy_readers])
+        nested_rejected = [reader.rejected for reader in self.prodigy_readers]
+        rejected = [item for sublist in nested_rejected for item in sublist] 
+        return len(set(rejected))
+    
+    @property
+    def rejected(self) -> list[int]:
+        nested_rejected = [reader.rejected for reader in self.prodigy_readers] 
+        rejected = [item for sublist in nested_rejected for item in sublist]
+        return sorted(list(set(rejected)))
+    
+    @property
+    def nr_annot(self) -> int:
+        return sum([reader.nr_total for reader in self.prodigy_readers])
+    
+    @property
+    def nr_total(self) -> int:
+        # check if duplicates in self.df
+        ids = self.df['id'].to_list()
+        assert len(ids) == len(set(ids)), "There are duplicate IDs in the dataframe"
+        return len(self.df)
+    
+    @property
+    def ids(self) -> list[int]:
+        return sorted(list(set(self.df['id'].to_list())))
 
     def visualize_dist(self, x_label: str = None, save_path: str = None) -> None:
         if x_label is None:
@@ -666,32 +699,68 @@ class ProdigyDataCollector():
             return False
 
     def get_label_task_df(self, task: str) -> tuple[dict[int, str], pd.DataFrame]:
-        readers = [reader for reader in self.prodigy_readers if reader.purpose == 'class' or reader.purpose == 'both']
         if self._is_valid_task(task):
-            label_to_int, task_df = readers[0].get_label_task_df(
-                task)
-            for reader in readers[1:]:
-                label_to_int, reader_task_df = reader.get_label_task_df(
-                    task, label_to_int)
-                task_df = pd.concat([task_df, reader_task_df])
+            readers = [reader for reader in self.prodigy_readers if reader.purpose == 'class' or reader.purpose == 'both']
+            task_dfs = []
+            prev_label_to_int = {}
+            for reader in readers:
+                relevant_ids_of_reader = self.df[self.df.source_file == reader.jsonl_path].id
+                label_to_int, task_df = reader.get_label_task_df(task)
+                # All labels are lists -> convert to single label
+                if not any(task_df[task].apply(len) > 1):
+                    for idx, row in task_df.iterrows():
+                        try: 
+                            task_df.at[idx, task] = row[task][0]
+                        except IndexError:
+                            task_df.at[idx, task] = None
+                else:
+                    raise ValueError('Task is multilabel, please use get_onehot_task_df')
 
-            # TODO: Make more efficient
-            if not any(task_df[task].apply(len) > 1):
-                task_df[task] = task_df[task].apply(lambda x: x[0])
+                task_df = task_df[task_df.id.isin(relevant_ids_of_reader)]
+                # Check if label_to_int is the same
+                if not prev_label_to_int:
+                    prev_label_to_int = label_to_int
+                else:
+                    if prev_label_to_int != label_to_int:
+                        print('Mismatch in label_to_int detected, remapping labels')
+                        self.compare_dictionaries(prev_label_to_int, label_to_int)
+                        # remap the labels
+                        for idx, row in task_df.iterrows():
+                            old_label = label_to_int[row[task]]
+                            new_label = prev_label_to_int[old_label]
+                            task_df.at[idx, task] = new_label
 
-            return label_to_int, task_df
+                task_dfs.append(task_df)
+            label_task_df = pd.concat(task_dfs)
+            label_task_df.reset_index(drop=True, inplace=True)
+            return prev_label_to_int, label_task_df
 
     def get_onehot_task_df(self, task_name: str) -> pd.DataFrame:
-        readers = [reader for reader in self.prodigy_readers if reader.purpose == 'class' or reader.purpose == 'both']
+        task_dfs = []
         if self._is_valid_task(task_name):
-            task_filtered_df = readers[0].get_onehot_task_df(
-                task_name)
-            for reader in readers[1:]:
-                reader_task_df = reader.get_onehot_task_df(task_name)
-                task_filtered_df = pd.concat(
-                    [task_filtered_df, reader_task_df])
+            relevant_readers = [reader for reader in self.prodigy_readers if reader.purpose == 'class' or reader.purpose == 'both']
+            for reader in relevant_readers:
+                # Get ids of that reader that are used in this datacollector (s. duplicates and expert annotator)
+                relevant_ids_of_reader = self.df[self.df.source_file == reader.jsonl_path].id
+                task_df = reader.get_onehot_task_df(task_name)
+                task_df = task_df[task_df.id.isin(relevant_ids_of_reader)]
+                task_dfs.append(task_df)
+        
+        task_filtered_df = pd.concat(task_dfs)
+        task_filtered_df.reset_index(drop=True, inplace=True)
+        return task_filtered_df
 
-            return task_filtered_df
+    def get_unannotated(self, task_name: str) -> list[int]:
+        '''Get all record ids that are not annotated for a specific task'''
+        if self._is_valid_task(task_name):
+            # if task is multilabel
+            if self.is_multilabel(task_name):
+                task_df = self.get_onehot_task_df(task_name)
+                ids = task_df['id'].to_list() # TODO: do not hardcode the column name
+            else:
+                _, task_df = self.get_label_task_df(task_name)
+                ids = task_df['id'].to_list() # TODO: do not hardcode the column name
+            return [id for id in self.ids if id not in ids]
 
     def visualize_nr_dist(self, x_label: str = None, save_path: str = None) -> None:
         if x_label is None:
@@ -748,6 +817,35 @@ class ProdigyDataCollector():
                     ners.append((' '.join(ner), label))
         return ners
 
+    def get_label(self, record_id: int, task: str) -> list[str]:
+        '''Get the label of a given record id and task'''
+        self._is_valid_task(task)
+        entry = self.df[self.df['id'] == record_id]
+        if entry.empty:
+            raise ValueError(f'Id {record_id} not found in dataframe')
+        else:
+            labels = []
+            for col in self.df.columns:
+                if col.startswith(task):
+                    label = col.split(': ')[1]
+                    if entry[col].values[0] == 1:
+                        labels.append(label)
+                        # if task is multilabel, return list of labels
+                        if not self.is_multilabel(task):
+                            return labels
+            return labels
+
+    def get_labels(self, record_id: int) -> dict[str, list[str]]:
+        '''Get all labels of a given record id'''
+        entry = self.df[self.df['id'] == record_id]
+        if entry.empty:
+            raise ValueError(f'Id {record_id} not found in dataframe')
+        else:
+            labels = {}
+            for task in self.tasks.keys():
+                labels[task] = self.get_label(record_id, task)
+            return labels
+
     def get_ner_stats(self, save_path: str = None) -> None:
         """
         Report entities frequency of NER (avg. per abstract), 
@@ -798,8 +896,7 @@ class ProdigyDataCollector():
             for label, nr in nr_ner_per_label.items():
                 report_lines.append(f'\t {label}: {nr}')
 
-            report_lines.append(f'Average number of entities per abstract: {
-                                avg_nr_entities_per_abstract}')
+            report_lines.append(f'Average number of entities per abstract: {avg_nr_entities_per_abstract}')
 
             report_lines.append(
                 'Average number of entities per abstract per label:')
@@ -825,21 +922,17 @@ class ProdigyDataCollector():
                 print(line)
 
     def get_nr_annot_stats(self, save_path: str = None) -> None:
-        nr_rejected = 0
-        for reader in self.prodigy_readers:
-            nr_rejected += reader.nr_rejected
-        nr_total = sum([reader.nr_total for reader in self.prodigy_readers])
-
         # print or save the number of annotations and rejected samples in total
         report_lines = []
         report_lines.append(
-            f'Total number of annotations: {nr_total}')
-        report_lines.append(f'Total number of rejected samples: {nr_rejected}')
+            f'Total number of annotations: {self.nr_annot}')
+        report_lines.append(f'Total number of rejected samples: {self.nr_rejected}')
         report_lines.append(
-            f'Total number of valid annotations:  {len(self.df)}')
-        report_lines.append(f'Total number of duplicates: {
-                            len(self.duplicates)}')
+            f'Total number of valid annotations:  {self.nr_total}')
+        report_lines.append(f'Total number of duplicates: {len(self.duplicates)}')
         report_lines.append(f'Duplicates: {self.duplicates}')
+        report_lines.append(f'Rejected samples: {self.rejected}')
+    
         if save_path:
             # check if it's file or folder
             if os.path.isdir(save_path):
@@ -850,7 +943,7 @@ class ProdigyDataCollector():
         else:
             for line in report_lines:
                 print(line)
-
+    
 
 class ProdigyIAAHelper():
     def __init__(self, list_of_files: list[str], names: list[str] = None, log: str = 'iaa.log') -> None:

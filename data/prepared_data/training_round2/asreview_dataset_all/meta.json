@@ -1,0 +1,13 @@
+{
+    "Task": "PsychNamicRelevant",
+    "Date": "20241223",
+    "Int_to_label": {
+        "0": "excluded",
+        "1": "included"
+    },
+    "Train_size": 4513,
+    "Use_val": true,
+    "Is_multilabel": false,
+    "Test_size": 565,
+    "Val_size": 565
+}

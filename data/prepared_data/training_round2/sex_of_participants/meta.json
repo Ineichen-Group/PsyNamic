@@ -1,0 +1,16 @@
+{
+    "Task": "PsyNamicSingleLabel",
+    "Date": "20250107",
+    "Int_to_label": {
+        "0": "Both sexes",
+        "1": "Female",
+        "2": "Male",
+        "3": "Not applicable",
+        "4": "Unknown"
+    },
+    "Train_size": 768,
+    "Use_val": true,
+    "Is_multilabel": false,
+    "Test_size": 96,
+    "Val_size": 96
+}

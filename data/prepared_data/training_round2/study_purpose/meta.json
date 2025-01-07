@@ -1,0 +1,17 @@
+{
+    "Task": "PsyNamicMultiLabel",
+    "Date": "20250107",
+    "Int_to_label": {
+        "0": "Pharmacokinetics",
+        "1": "Efficacy endpoints",
+        "2": "Demographic study",
+        "3": "Disease model study",
+        "4": "Safety endpoints",
+        "5": "Mechanism of action"
+    },
+    "Train_size": 758,
+    "Use_val": true,
+    "Is_multilabel": true,
+    "Test_size": 97,
+    "Val_size": 92
+}

@@ -1,0 +1,20 @@
+{
+    "Task": "PsyNamicMultiLabel",
+    "Date": "20250107",
+    "Int_to_label": {
+        "0": "Systematic review/meta-analysis",
+        "1": "Cohort study",
+        "2": "Other",
+        "3": "Case report",
+        "4": "Qualitative Study",
+        "5": "Randomized-controlled trial (RCT)",
+        "6": "Study protocol",
+        "7": "Case series",
+        "8": "Real-world study"
+    },
+    "Train_size": 767,
+    "Use_val": true,
+    "Is_multilabel": true,
+    "Test_size": 97,
+    "Val_size": 97
+}

@@ -1,0 +1,25 @@
+{
+    "Task": "PsyNamicMultiLabel",
+    "Date": "20250107",
+    "Int_to_label": {
+        "0": "Interviews",
+        "1": "Physiological Functions",
+        "2": "Mental Functions",
+        "3": "Surveys",
+        "4": "Emergency department visits",
+        "5": "PET, SPECT",
+        "6": "The ability to drive a car",
+        "7": "Electroencephalography (EEG)",
+        "8": "Psychedelic experience",
+        "9": "Soluble biomarker",
+        "10": "Functional MRI",
+        "11": "Suicide",
+        "12": "MRI",
+        "13": "Neurotoxicity"
+    },
+    "Train_size": 731,
+    "Use_val": true,
+    "Is_multilabel": true,
+    "Test_size": 94,
+    "Val_size": 91
+}
