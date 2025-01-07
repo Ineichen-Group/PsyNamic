@@ -40,6 +40,7 @@ MODEL_IDENTIFIER = {
 # TODO: Use some inheritence with DataHandler and DataHandlerBIO
 # TODO: Make load and get more consistent
 # TODO: Typing and docstrings
+# TODO: Check colum names: Define at 1 place only, clean up
 
 ############################################################################################################
 # DATA SPLIT CLASS, SPECIFIC FOR PSYNAMIC
@@ -49,6 +50,7 @@ class DataSplit(Dataset):
     ID_COL = 'id'
     TEXT_COL = 'text'
     LABEL_COL = 'labels'
+    FILE_COL = 'source_file'
 
     def __init__(self, split: pd.DataFrame, id2label: dict[int, str], tokenizer, max_len: str, multilabel: bool) -> None:
         self.df = split
@@ -203,14 +205,20 @@ class DataSplitBIO(DataSplit):
         self.id2label = {int(v): k for k, v in self.label2id.items()}
         self.tokenizer = tokenizer
         self.is_multilabel = False
-
+        
         # Convert string representations of lists to lists
-        self.df[self.TOKEN_COL] = self.df[self.TOKEN_COL].apply(
-            ast.literal_eval)
-        self.df[self.NER_COL] = self.df[self.NER_COL].apply(ast.literal_eval)
+        self.df.loc[:, self.TOKEN_COL] = self.df[self.TOKEN_COL].apply(self.safe_literal_eval)
+        self.df.loc[:, self.NER_COL] = self.df[self.NER_COL].apply(self.safe_literal_eval)
 
         # Make sure the ids of label2id are integers
         self.label2id = {k: int(v) for k, v in self.label2id.items()}
+
+    def safe_literal_eval(self, x):
+        # check if x is a list of string already
+        if isinstance(x, list) and all(isinstance(i, str) for i in x):
+            return x
+        else:
+            return ast.literal_eval(x)
 
     def __getitem__(self, idx: int) -> dict:
         tokens = self.df.iloc[idx][self.TOKEN_COL]
@@ -375,8 +383,9 @@ class DataHandlerBIO():
             self.max_len = self._detect_length()
 
         # Check for overlaps
-        if self.check_overlap():
-            raise ValueError('Overlap between splits detected.')
+        self.check_overlap()
+        self.check_duplicates()
+        
         train = DataSplitBIO(self.train, self.label2id,
                              self.tokenizer, self.max_len)
         test = DataSplitBIO(self.test, self.label2id,
@@ -415,6 +424,7 @@ class DataHandlerBIO():
             "Int_to_label": {v: k for k, v in self.label2id.items()},
             "Train_size": len(self.train),
             "Use_val": self.val is not None,
+            "Val_size": len(self.val) if self.val is not None else 0,
             "Test_size": len(self.test),
             "Is_multilabel": False,
         }
@@ -486,6 +496,31 @@ class DataHandlerBIO():
                 print(
                     f"Overlap between Test and Validation splits: {overlap_report['Test-Val']}")
 
+    def check_duplicates(self):
+        """Check for duplicates in the train, test, and validation splits."""
+        if self.train is None or self.test is None:
+            raise ValueError("No splits have been created yet.")
+
+        # Ensure 'id' column exists in the DataFrames
+        if 'id' not in self.train.columns or 'id' not in self.test.columns:
+            raise ValueError(
+                "'id' column is required in train, test, and validation DataFrames.")
+
+        # Check for duplicates
+        duplicates_train = self.train[self.train.duplicated(subset='id')]
+        duplicates_test = self.test[self.test.duplicated(subset='id')]
+        duplicates_val = self.val[self.val.duplicated(subset='id')]
+
+        if not duplicates_train.empty:
+            print(f"Duplicate IDs in Train split: {duplicates_train['id'].tolist()}")
+
+        if not duplicates_test.empty:
+            print(f"Duplicate IDs in Test split: {duplicates_test['id'].tolist()}")
+
+        if not duplicates_val.empty:
+            print(f"Duplicate IDs in Validation split: {duplicates_val['id'].tolist()}")
+
+
 ############################################################################################################
 # ABSTRACT CLASS FOR SPLITTING AND HANDLING DATA
 ############################################################################################################
@@ -499,6 +534,7 @@ class DataHandler():
     # Required column name, shall be defined in the inheriting class with read_in_data()
     LABEL_COL = 'labels'
     ANNOTATOR_COL = 'annotator'  # Optional column for annotator information
+    FILE_COL = 'source_file'  # Optional column for source file information
 
     def __init__(self, model: str = 'scibert', data_path: str = None, meta_file: str = None, int_to_label: dict[str] = None, ) -> None:
         self.model = MODEL_IDENTIFIER[model]
@@ -511,7 +547,6 @@ class DataHandler():
 
         if meta_file:
             meta_data = json.load(open(meta_file))
-            filename = path.basename(data_path)
             self.is_multilabel = meta_data['Is_multilabel']
             if "Int_to_label" in meta_data:
                 self.id2label = meta_data['Int_to_label']
@@ -939,11 +974,11 @@ class PsyNamicMultiLabel(DataHandler):
 
     def read_in_data(self, data_path: str) -> pd.DataFrame:
         df = pd.read_csv(data_path)
-        label_cols = df.columns[df.columns.get_loc(self.ANNOTATOR_COL)+1:]
+        label_cols = set(df.columns.to_list()) - set([self.ID_COL, self.TEXT_COL, self.ANNOTATOR_COL, self.FILE_COL])
         self.id2label = {i: col for i, col in enumerate(label_cols)}
 
         def to_one_hot_encoded(row):
-            return row[label_cols].values.tolist()
+            return row[list(label_cols)].values.tolist()
 
         # Apply the function to each row and create a new 'labels' column
         df[self.LABEL_COL] = df.apply(to_one_hot_encoded, axis=1)
