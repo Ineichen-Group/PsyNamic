@@ -9,6 +9,7 @@ import re
 
 
 def prepare_train_data(prodigy_data: ProdigyDataCollector, outpath: str) -> None:
+    """Prepare unsplit data for training, e.g. save to csv and write meta file"""
     if not outpath:
         outpath = 'data/prepared_data'
     tasks = prodigy_data.tasks.keys()
@@ -53,6 +54,10 @@ def find_file_in_dir(file_string: str, dir: str) -> str:
 
 
 def prepare_bio_data(list_jsonl: list[str], id_field: str, outfile: str, purposes: list[str], expert_annot: str = '') -> str:
+    """Prepare NER data for training, e.g. save to jsonl and write meta file
+
+        Fixes issues with whitespace tokens and merges them if they are between two NER tokens
+    """
     outfile_path = os.path.dirname(outfile)
 
     if not purposes:
@@ -98,14 +103,14 @@ def prepare_bio_data(list_jsonl: list[str], id_field: str, outfile: str, purpose
                         text += ' '
         return text
 
-    def is_whitespace(token:str) -> bool:
+    def is_whitespace(token: str) -> bool:
         pattern = r'[^\S\r\n]+'
         return re.fullmatch(pattern, token)
-    
+
     def find_whitespace_indices(tokens: dict[str]) -> list[int]:
         """should catch \u00a0 and \u2009 ect."""
         # Match any whitespace except \n, \r
-        
+
         whitespace_ids = [t['id'] for t in tokens if is_whitespace(t['text'])]
         return whitespace_ids
 
@@ -150,7 +155,8 @@ def prepare_bio_data(list_jsonl: list[str], id_field: str, outfile: str, purpose
                             tokens, span['token_start'], span['token_end'])
                         new_token_text = get_text_from_span(
                             tokens, prev_span['token_start'], span['token_end'])
-                        print(f'"{prev_span_text}" + "{span_text.strip()}" --> "{new_token_text.strip()}"')
+                        print(f'"{prev_span_text}" + "{span_text.strip()
+                                                       }" --> "{new_token_text.strip()}"')
                         new_span = {
                             "start": prev_span['start'],
                             "end": span['end'],
@@ -214,8 +220,8 @@ def prepare_bio_data(list_jsonl: list[str], id_field: str, outfile: str, purpose
         os.path.dirname(outfile), 'ner_bio/'))
 
 
-def prepare_splits(data_path: str):
-
+def prepare_splits(data_path: str, all_data_path: str):
+    """Prepare balanced splits for all tasks and also for rejected/relevant"""
     tasks = [
         "Data Collection",
         "Data Type",
@@ -232,11 +238,11 @@ def prepare_splits(data_path: str):
         "Substance Naivety",
         "Substances",
         "Sex of Participants",
-        "Study Conclusion",  # Not enough data to make split
-        "Study Type",  # Not enough data to make split
+        "Study Conclusion",
+        "Study Type",
     ]
-    for task in tasks:
 
+    for task in tasks:
         task_lower = task.replace(' ', '_').lower() + '.csv'
         file = find_file_in_dir(task_lower, data_path)
 
@@ -245,7 +251,7 @@ def prepare_splits(data_path: str):
         else:
             data_handler = PsyNamicSingleLabel(file, task)
         try:
-            print(f'Processing {task}')
+            print(f'Processing "{task}"')
             data_handler.print_label_dist()
             data_handler.get_strat_split(use_val=True)
             data_handler.save_split(
@@ -256,26 +262,35 @@ def prepare_splits(data_path: str):
             # TODO: Handle to small splits
             print(f'Could not split {task}')
 
-    file = 'data/raw_data/asreview_dataset_all_Psychedelic Study.csv'
-    data_handler = PsychNamicRelevant(
-        file, 'record_id', 'title', 'abstract', 'included')
+    print('Processing relevant/irrelevant')
+    data_handler = PsyNamicSingleLabel(
+        all_data_path, relevant_class='labels', int_to_label={0: 'irrelevant', 1: 'relevant'})
     data_handler.get_strat_split(use_val=True)
-    data_handler.save_split(f'data/prepared_data/asreview_dataset_all/')
+    data_handler.save_split(f'{data_path}/relevant')
 
 
-def prepare_all(outfile: str):
+def prepare_all(outfile_all: str, outfile_relevant: str, prodigy_data: ProdigyDataCollector = None):
+    """Prepare all data for training and splitting"""
     file = 'data/raw_data/asreview_dataset_all_Psychedelic Study.csv'
     df = pd.read_csv(file)
     # get distribution of included column, including nan
     print(df['included'].value_counts(dropna=False))
-    print(len(df))
     data_handler = PsychNamicRelevant(
         file, 'record_id', 'title', 'abstract', 'included')
+
+    # Add rejected to all data
+    if prodigy_data:
+        rejected = prodigy_data.rejected
+        data_handler.add_data(rejected)
+
+    # Save all data
+    data_handler.df.to_csv(outfile_all, index=False)
+
+    # Save relevant data only
     # where included is 1
     df = data_handler.df[data_handler.df['labels'] == 1]
-    print(len(df))
     df = df.drop(columns=['labels'])
-    df.to_csv(outfile, index=False)
+    df.to_csv(outfile_relevant, index=False)
 
 
 if __name__ == '__main__':
@@ -295,24 +310,24 @@ if __name__ == '__main__':
         'Pia'
     ]
 
-    # Fix for duplicates --> put Ben's files first
-    list_json_bio = [
-        'data/prodigy_exports/prodigy_export_ben_95_20240423_113434.jsonl',
-        # Data appearing 3 times
-        'data/prodigy_exports/prodigy_export_ben_24_20240425_152801.jsonl',
-        'data/iaa/iaa_round1_50/iaa_resolution/prodigy_export_review_all_token_50_20240418_20240607_145359.jsonl',
-        # Data appearing 3 times
-        'data/iaa/iaa_round2_40/iaa_resolution/prodigy_export_review_all_token_40_20240523_20240705_183410.jsonl',
-        'data/prodigy_exports/prodigy_export_pia_250_20240423_113437_20240720_135743.jsonl'
+    purposes = [
+        'both',
+        'class',
+        'both',
+        'class',
+        'both'
     ]
-    # prodigy_data = ProdigyDataCollector(
-    #    list_jsonl, annotators, expert_annotator='Ben')
-    # prepare_train_data(list_jsonl, annotators, outpath='data/prepared_data/training_round1')
-    # prepare_splits('data/prepared_data/training_round1')
-    # prepare_bio_data(list_json_bio, 'record_id',
-    #                  'data/prepared_data/ner_bio.jsonl')
-    # outfile = 'data/prepared_data/all/psychedelic_study_relevant.csv'
-    # prepare_all(outfile)
+
+    round1 = 'data/prepared_data/training_round1'
+    prodigy_data = ProdigyDataCollector(
+        list_jsonl, annotators, expert_annotator='Ben')
+
+    outfile = os.path.join(round1, 'psychedelic_study_all.csv')
+    outfile_relevant = os.path.join(round1, 'psychedelic_study_relevant.csv')
+    prepare_all(outfile, outfile_relevant, prodigy_data)
+    prepare_train_data(prodigy_data, outpath=round1)
+    prepare_splits(round1, outfile)
+    prepare_bio_data(list_jsonl, 'record_id', f'{round1}/ner.jsonl', purposes, expert_annot='Ben')
 
     # Second round training
     list_jsonl = [
@@ -351,9 +366,17 @@ if __name__ == '__main__':
         'ner',]
     prodigy_data = ProdigyDataCollector(
         list_jsonl, annotators, expert_annotator='Ben_double_annot', purposes=purposes)
-    
+
+    outfile_all = 'data/prepared_data/psychedelic_study_all.csv'
+    outfile_relevant = 'data/prepared_data/psychedelic_study_relevant.csv'
+    round2_path = 'data/prepared_data/training_round2'
+    # Prepare all data (adding rejected samples to relevant/irrelevant + getting relevant samples)
+    prepare_all(outfile_all, outfile_relevant, prodigy_data)
+    # Encode data for training all tasks
     prepare_train_data(
-        prodigy_data, outpath='data/prepared_data/training_round2')
-    prepare_splits('data/prepared_data/training_round2')
-    prepare_bio_data(list_jsonl, 'record_id', 'data/prepared_data/training_round2/ner.jsonl',
+        prodigy_data, outpath=round2_path)
+    # Split data for all tasks and relevant/irrelevant
+    prepare_splits(round2_path, outfile_all)
+    # Prepare NER data, fix duplicates and whitespace issues
+    prepare_bio_data(list_jsonl, 'record_id', f'{round2_path}/ner.jsonl',
                      purposes, expert_annot='Ben_double_annot')

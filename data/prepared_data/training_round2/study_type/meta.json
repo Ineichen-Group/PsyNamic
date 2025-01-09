@@ -1,16 +1,16 @@
 {
     "Task": "PsyNamicMultiLabel",
-    "Date": "20250107",
+    "Date": "20250109",
     "Int_to_label": {
-        "0": "Systematic review/meta-analysis",
-        "1": "Cohort study",
-        "2": "Other",
-        "3": "Case report",
-        "4": "Qualitative Study",
-        "5": "Randomized-controlled trial (RCT)",
-        "6": "Study protocol",
-        "7": "Case series",
-        "8": "Real-world study"
+        "0": "Study protocol",
+        "1": "Other",
+        "2": "Real-world study",
+        "3": "Cohort study",
+        "4": "Randomized-controlled trial (RCT)",
+        "5": "Case series",
+        "6": "Case report",
+        "7": "Qualitative Study",
+        "8": "Systematic review/meta-analysis"
     },
     "Train_size": 767,
     "Use_val": true,

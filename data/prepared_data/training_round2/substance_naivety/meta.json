@@ -1,11 +1,11 @@
 {
     "Task": "PsyNamicMultiLabel",
-    "Date": "20250107",
+    "Date": "20250109",
     "Int_to_label": {
-        "0": "Substance-Naïve Participants",
-        "1": "Unknown",
-        "2": "Substance-non-naïve participants",
-        "3": "Not applicable"
+        "0": "Unknown",
+        "1": "Substance-Naïve Participants",
+        "2": "Not applicable",
+        "3": "Substance-non-naïve participants"
     },
     "Train_size": 770,
     "Use_val": true,

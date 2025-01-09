@@ -536,7 +536,7 @@ class DataHandler():
     ANNOTATOR_COL = 'annotator'  # Optional column for annotator information
     FILE_COL = 'source_file'  # Optional column for source file information
 
-    def __init__(self, model: str = 'scibert', data_path: str = None, meta_file: str = None, int_to_label: dict[str] = None, ) -> None:
+    def __init__(self, model: str = 'scibert', data_path: Union[str, list] = None, meta_file: str = None, int_to_label: dict[str] = None, ) -> None:
         self.model = MODEL_IDENTIFIER[model]
         self.nr_classes = False
         self.tokenizer = AutoTokenizer.from_pretrained(self.model)
@@ -944,11 +944,13 @@ class DataHandler():
 ############################################################################################################
 class PsyNamicSingleLabel(DataHandler):
 
-    def __init__(self, data_path: str, relevant_class: str, meta_file: Optional[str] = None) -> None:
+    def __init__(self, data_path: str, relevant_class: str, meta_file: Optional[str] = None, int_to_label: Optional[str] = None) -> None:
         self.relevant_class = relevant_class
         filename = path.basename(data_path)
         task = filename.split('.')[0]
-        if not meta_file:
+
+        # Look for meta file in the same directory as the data file when no meta file or int_to_label is provided
+        if not(meta_file) and not(int_to_label):
             all_meta_files = [f for f in os.listdir(
                 path.dirname(data_path)) if 'meta' in f]
             for file in all_meta_files:
@@ -956,7 +958,13 @@ class PsyNamicSingleLabel(DataHandler):
                     meta_file = path.join(path.dirname(data_path), file)
                     break
 
-        super().__init__(data_path=data_path, meta_file=meta_file)
+        if meta_file:
+            super().__init__(data_path=data_path, meta_file=meta_file)
+        elif int_to_label:
+            super().__init__(data_path=data_path, int_to_label=int_to_label)
+        else:
+            raise FileNotFoundError(
+                    'Tried to find a meta file, but none was found. Please provide a meta file or int_to_label dictionary.')
 
     def read_in_data(self, data_path: str) -> pd.DataFrame:
         df = pd.read_csv(data_path)
@@ -1010,6 +1018,25 @@ class PsychNamicRelevant(DataHandler):
         df.dropna(inplace=True)
 
         return df
+    
+    def add_data(self, rejected_data: pd.DataFrame) -> None:
+        """ Add data from another DataHandler to the current DataHandler. """
+        # Rename record_id to id, add labels column with 0, and keep id, text, and labels columns
+        rejected_data = rejected_data.rename(columns={'record_id': 'id'}).copy()
+        rejected_data[self.LABEL_COL] = 0
+        rejected_data = rejected_data[[self.ID_COL, self.TEXT_COL, self.LABEL_COL]]
+
+        # Identify IDs that need their labels updated
+        overlapping_ids = rejected_data[self.ID_COL].isin(self.df[self.ID_COL])
+        self.df.loc[self.df[self.ID_COL].isin(rejected_data[self.ID_COL]), self.LABEL_COL] = 0
+
+        # Drop rows from rejected_data that are already in self.df
+        rejected_data = rejected_data[~overlapping_ids]
+        self.df = pd.concat([self.df, rejected_data], ignore_index=True)
+
+        self.nr_classes = self._determine_nr_classes()
+        self.max_len = self._detect_length()
+
 
 
 class DummyDataHandler(DataHandler):

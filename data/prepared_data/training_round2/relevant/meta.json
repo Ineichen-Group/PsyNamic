@@ -1,0 +1,13 @@
+{
+    "Task": "PsyNamicSingleLabel",
+    "Date": "20250109",
+    "Int_to_label": {
+        "0": "irrelevant",
+        "1": "relevant"
+    },
+    "Train_size": 4513,
+    "Use_val": true,
+    "Is_multilabel": false,
+    "Test_size": 565,
+    "Val_size": 565
+}

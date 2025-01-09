@@ -1,15 +1,15 @@
 {
     "Task": "PsyNamicMultiLabel",
-    "Date": "20250107",
+    "Date": "20250109",
     "Int_to_label": {
-        "0": "Nasal",
-        "1": "Subcutaneous",
-        "2": "Smoking",
+        "0": "Subcutaneous",
+        "1": "Unknown",
+        "2": "Not applicable",
         "3": "Other",
-        "4": "Not applicable",
+        "4": "Oral",
         "5": "Intravenous",
-        "6": "Unknown",
-        "7": "Oral"
+        "6": "Smoking",
+        "7": "Nasal"
     },
     "Train_size": 771,
     "Use_val": true,
