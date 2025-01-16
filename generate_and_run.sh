@@ -22,6 +22,7 @@ tasks=(
     "Sex of Participants"
     "Study Conclusion"
     "Study Type"
+    "NER Bio"
 )
 
 # Directory to store the generated scripts

@@ -469,8 +469,12 @@ def finetune(args: argparse.Namespace) -> None:
         Example call for MODE='train' e.g. python model/model.py --model pubmedbert --data data/prepared_data/asreview_dataset_all --task 'Relevant Sample'
     """
     project_path = init_directories(args.model, args.task)
+    # check if the data directory exists
+    if not os.path.exists(args.data):
+        raise ValueError('Please provide a valid path to the data directory')
+
     meta_file = os.path.join(args.data, 'meta.json')
-    meta_data = json.load(open(meta_file, 'r'))
+    meta_data = json.load(open(meta_file, 'r', encoding='utf-8'))
     # TODO: solve it nice that meta data is not loaded twice
     train_dataset, test_dataset, val_dataset = load_data(
         args.data, meta_file, args.model)
@@ -490,7 +494,7 @@ def cont_finetune(args: argparse.Namespace) -> None:
     """
     args = set_args_from_file(args)
     meta_file = os.path.join(args.data, 'meta.json')
-    meta_data = json.load(open(meta_file, 'r'))
+    meta_data = json.load(open(meta_file, 'r', encoding='utf-8'))
     train_dataset, test_dataset, eval_dataloader = load_data(
         args.data, meta_file, args.model)
     trainer = train(args.load, train_dataset,

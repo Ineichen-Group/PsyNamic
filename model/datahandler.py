@@ -537,7 +537,11 @@ class DataHandler():
     FILE_COL = 'source_file'  # Optional column for source file information
 
     def __init__(self, model: str = 'scibert', data_path: Union[str, list] = None, meta_file: str = None, int_to_label: dict[str] = None, ) -> None:
-        self.model = MODEL_IDENTIFIER[model]
+        try:
+            self.model = MODEL_IDENTIFIER[model]
+        except KeyError:
+            raise ValueError(
+                f"Model '{model}' not found. Choose from {list(MODEL_IDENTIFIER.keys())} or update the MODEL_IDENTIFIER dictionary.")
         self.nr_classes = False
         self.tokenizer = AutoTokenizer.from_pretrained(self.model)
         # Provide either meta_file or int_to_label
