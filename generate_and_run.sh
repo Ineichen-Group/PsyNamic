@@ -47,9 +47,9 @@ for task in "${tasks[@]}"; do
 #SBATCH --output=log/psynamic_${model}_${task_filename}.out  ## standard out file
 #SBATCH --partition=lowprio
 
-module load anaconda3
-source activate psynamic_gpu_env
-python model/model.py --model ${model} --data data/prepared_data/${task_filename} --task '${task}' --early_stopping_patience 3 
+module load mamba
+mamba activate psynamic_env
+python model/model.py --model ${model} --data /scratch/vebern/PsyNamic/data/prepared_data/training_round2/${task_filename} --task '${task}' --early_stopping_patience 3 
 EOT
 
     # Make the generated script executable
