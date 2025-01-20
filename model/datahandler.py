@@ -197,7 +197,8 @@ class DataSplitBIO(DataSplit):
     """
     TOKEN_COL = 'tokens'
     NER_COL = 'ner_tags'
-    BERT_IDS_COL = 'bert_tokens'
+    WORD_IDS = 'word_ids'
+    BERT_TOKEN_COL = 'bert_tokens'
     BERT_NER_COL = 'bert_ner_tags'
 
     def __init__(self, split: pd.DataFrame, label2id: dict, tokenizer, max_len: int) -> None:
@@ -237,16 +238,18 @@ class DataSplitBIO(DataSplit):
                 is_split_into_words=True,
                 return_tensors='pt'
             )
+            bert_tokens = self.tokenizer.convert_ids_to_tokens(encoding['input_ids'][0])
             word_ids = encoding.word_ids(batch_index=0)
             labels_ids = [self.label2id[tag] for tag in ner_tags]
             aligned_labels = self.align_labels_with_tokens(labels_ids, word_ids)
             
             return pd.Series({
-                self.BERT_IDS_COL: word_ids,
+                self.BERT_TOKEN_COL: bert_tokens,
+                self.WORD_IDS: word_ids,
                 self.BERT_NER_COL: aligned_labels
             })
 
-        self.df[[self.BERT_IDS_COL, self.BERT_NER_COL]] = self.df.apply(encode_and_align_row, axis=1)
+        self.df[[self.WORD_IDS, self.BERT_NER_COL]] = self.df.apply(encode_and_align_row, axis=1)
 
     def __getitem__(self, idx: int) -> dict:
         tokens = self.df.iloc[idx][self.TOKEN_COL]
@@ -265,9 +268,8 @@ class DataSplitBIO(DataSplit):
     def __next__(self) -> tuple:
         if self._index < len(self.df):
             id_ = self.df.iloc[self._index][self.ID_COL]
-            word_ids = self.df.iloc[self._index][self.BERT_IDS_COL]
+            bert_tokens = self.df.iloc[self._index][self.BERT_TOKEN_COL]
             # Convert word_ids to bert tokens (inclduding special tokens, padding and subwords)
-            bert_tokens = self.tokenizer.convert_ids_to_tokens(word_ids)
             labels = self.df.iloc[self._index][self.BERT_NER_COL]
             self._index += 1
             return id_, bert_tokens, labels
