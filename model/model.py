@@ -389,25 +389,24 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
     pred_data = []
     
     # NER --> token level classifciation
-    if type(test_dataset) == DataSplitBIO:
+    if isinstance(test_dataset, DataSplitBIO):
         probs_incl_spec = F.softmax(torch.Tensor(predictions.predictions), dim=2)
         pred_labels_idx = np.argmax(predictions.predictions, axis=2)
 
-        # iterate over samples
         for true_l, pred_l, prob, data in zip(predictions.label_ids, pred_labels_idx, probs_incl_spec, test_dataset):
-            id, tokens, _ = data
+            id_, tokens, _ = data
             if not (len(true_l) == len(pred_l) == len(prob) == len(tokens)):
                 raise ValueError('Lengths of predictions, true labels and probabilities do not match')
             # iterate over tokens
             for t, p, pr, token in zip(true_l, pred_l, prob, tokens):
                 if t != -100:
                     pred_data.append({
-                        "id": id,
+                        "id": id_,
                         "token": token,
-                        "prediction": test_dataset.labels[p],
+                        "prediction": test_dataset.labels[p],  # Get the human-readable label from the label index
                         "probability": pr.tolist(),
-                        "label": test_dataset.labels[t]
-                    }) 
+                        "label": test_dataset.labels[t]  # True label for the token
+                    })
             
     # Abstract classification
     else:

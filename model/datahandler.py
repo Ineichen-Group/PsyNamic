@@ -197,6 +197,8 @@ class DataSplitBIO(DataSplit):
     """
     TOKEN_COL = 'tokens'
     NER_COL = 'ner_tags'
+    BERT_IDS_COL = 'bert_tokens'
+    BERT_NER_COL = 'bert_ner_tags'
 
     def __init__(self, split: pd.DataFrame, label2id: dict, tokenizer, max_len: int) -> None:
         self.df = split
@@ -213,6 +215,8 @@ class DataSplitBIO(DataSplit):
         # Make sure the ids of label2id are integers
         self.label2id = {k: int(v) for k, v in self.label2id.items()}
 
+        self._encode_and_align()
+
     def safe_literal_eval(self, x):
         # check if x is a list of string already
         if isinstance(x, list) and all(isinstance(i, str) for i in x):
@@ -220,11 +224,33 @@ class DataSplitBIO(DataSplit):
         else:
             return ast.literal_eval(x)
 
+    def _encode_and_align(self) -> None:
+        def encode_and_align_row(row):
+            tokens = row[self.TOKEN_COL]
+            ner_tags = row[self.NER_COL]
+            
+            encoding = self.tokenizer(
+                tokens,
+                truncation=True,
+                padding='max_length',
+                max_length=self.max_len,
+                is_split_into_words=True,
+                return_tensors='pt'
+            )
+            word_ids = encoding.word_ids(batch_index=0)
+            labels_ids = [self.label2id[tag] for tag in ner_tags]
+            aligned_labels = self.align_labels_with_tokens(labels_ids, word_ids)
+            
+            return pd.Series({
+                self.BERT_IDS_COL: word_ids,
+                self.BERT_NER_COL: aligned_labels
+            })
+
+        self.df[[self.BERT_IDS_COL, self.BERT_NER_COL]] = self.df.apply(encode_and_align_row, axis=1)
+
     def __getitem__(self, idx: int) -> dict:
         tokens = self.df.iloc[idx][self.TOKEN_COL]
-        ner_tags = self.df.iloc[idx][self.NER_COL]
-
-        # Tokenize the tokens
+        aligned_labels = self.df.iloc[idx][self.BERT_NER_COL]
         encoding = self.tokenizer(
             tokens,
             truncation=True,
@@ -232,34 +258,29 @@ class DataSplitBIO(DataSplit):
             max_length=self.max_len,
             is_split_into_words=True,
             return_tensors='pt'
-        )      
-        labels_ids = [self.label2id[tag] for tag in ner_tags]
-        
-        # Align labels to bert tokens
-        word_ids = encoding.word_ids(batch_index=0)
-        bert_tokens = self.tokenizer.convert_ids_to_tokens(
-            encoding['input_ids'].squeeze(0))
-        aligned_labels = self.align_labels_with_tokens(labels_ids, word_ids)
-        encoding["labels"] = torch.tensor(aligned_labels, dtype=torch.long)
-        
-        # Convert tensor dimensions from (1, max_len) to (max_len)
+        )
+        encoding['labels'] = torch.tensor(aligned_labels, dtype=torch.long)
         return {key: val.squeeze(0) for key, val in encoding.items()}
     
-    def __next__(self):
+    def __next__(self) -> tuple:
         if self._index < len(self.df):
             id_ = self.df.iloc[self._index][self.ID_COL]
-            tokens = self.df.iloc[self._index][self.TOKEN_COL]
-            ner_tags = self.df.iloc[self._index][self.NER_COL]
+            word_ids = self.df.iloc[self._index][self.BERT_IDS_COL]
+            # Convert word_ids to bert tokens (inclduding special tokens, padding and subwords)
+            bert_tokens = self.tokenizer.convert_ids_to_tokens(word_ids)
+            labels = self.df.iloc[self._index][self.BERT_NER_COL]
             self._index += 1
-            return id_, tokens, ner_tags
+            return id_, bert_tokens, labels
         else:
-            raise StopIteration   
+            self._index = 0
+            raise StopIteration
         
     @property
     def labels(self) -> list[str]:
         return list(self.label2id.keys())
 
     def align_labels_with_tokens(self, labels, word_ids) -> list[int]:
+        """ Align labels that are meant for human-readable tokens with the BERT tokens."""
         new_labels = []
         current_word = None
         for word_id in word_ids:
@@ -283,7 +304,7 @@ class DataSplitBIO(DataSplit):
         # Ensure the labels are the same length as max_len
         new_labels = new_labels + [-100] * (self.max_len - len(new_labels))
         return new_labels[:self.max_len]
-    
+            
 class DataHandlerBIO():
     TOKEN_COL = 'tokens'
     NER_COL = 'ner_tags'
