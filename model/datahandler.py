@@ -249,7 +249,7 @@ class DataSplitBIO(DataSplit):
                 self.BERT_NER_COL: aligned_labels
             })
 
-        self.df[[self.WORD_IDS, self.BERT_NER_COL]] = self.df.apply(encode_and_align_row, axis=1)
+        self.df[[ self.BERT_TOKEN_COL, self.WORD_IDS, self.BERT_NER_COL]] = self.df.apply(encode_and_align_row, axis=1)
 
     def __getitem__(self, idx: int) -> dict:
         tokens = self.df.iloc[idx][self.TOKEN_COL]
