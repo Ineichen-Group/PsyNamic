@@ -241,10 +241,6 @@ class DataSplitBIO(DataSplit):
             encoding['input_ids'].squeeze(0))
         aligned_labels = self.align_labels_with_tokens(labels_ids, word_ids)
         encoding["labels"] = torch.tensor(aligned_labels, dtype=torch.long)
-
-        # Update to bert tokens and labels
-        self.df.at[idx, self.TOKEN_COL] = bert_tokens
-        self.df.at[idx, self.NER_COL] = aligned_labels
         
         # Convert tensor dimensions from (1, max_len) to (max_len)
         return {key: val.squeeze(0) for key, val in encoding.items()}

@@ -450,7 +450,7 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
         filename = 'test_eval.csv' if outfile is None else f'{outfile}_eval.csv'
         eval_file = os.path.join(project_folder, filename)
         # Write metrics to file 
-        with open(eval_file, 'w') as f:
+        with open(eval_file, 'w', encoding='utf-8') as f:
             json.dump(metrics, f)
             if report_df is not None:
                 # append classification report dataframe to metrics.json, convert to dict
