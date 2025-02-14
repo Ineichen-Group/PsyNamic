@@ -429,7 +429,7 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
                     true_labels, pred_labels)
     
         # Case 1: True labels are provided
-        if true_labels:
+        if isinstance(true_labels, np.ndarray):
             for d, pred_labels, true_labels, prob in zip(test_dataset, pred_labels, true_labels, probs):
                 id, text, _ = d
                 pred_data.append({
@@ -544,7 +544,7 @@ def load_and_predict(args: argparse.Namespace) -> None:
     exp_path = os.path.dirname(args.load)
     
     # Case 1: Test split of training used
-    if args.data is None:
+    if os.path.isdir(args.data):
         data_meta_file = os.path.join(args.data, 'meta.json')
         dataset = load_data(
             args.data, data_meta_file, args.model)[1]
