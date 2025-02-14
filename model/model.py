@@ -530,10 +530,10 @@ def load_and_predict(args: argparse.Namespace) -> None:
     args = set_args_from_file(args)
     trainer = load_model(args)
     exp_path = os.path.dirname(args.load)
-    data_meta_file = os.path.join(args.data, 'meta.json')
-
+    
     # Case 1: Test split of training used
     if args.data is None:
+        data_meta_file = os.path.join(args.data, 'meta.json')
         dataset = load_data(
             args.data, data_meta_file, args.model)[1]
         outfile_name = f'{os.path.basename(args.load)}_test_split'
@@ -543,11 +543,21 @@ def load_and_predict(args: argparse.Namespace) -> None:
             data = args.data
         else:
             raise ValueError('Please provide a valid path to the data file')
+        # search for data_meta_file in parent directory
+        data_meta_file = os.path.join(os.path.dirname(data), 'meta.json')
+
+        # check if there is a meta file in the data directory
+        if not os.path.exists(data_meta_file):
+            raise ValueError(
+                'Please provide a valid path to the data directory with a meta.json file')
+        # Load meta.json
+        meta_data = json.load(open(data_meta_file, 'r', encoding='utf-8'))
+        is_multilabel = meta_data['Is_multilabel']
         model = MODEL_IDENTIFIER[args.model]
         tokenizer = AutoTokenizer.from_pretrained(model)
-        max_length = args.max_length
+        max_length = args.max_len
         dataset = SimpleDataset(
-            data, tokenizer, max_length, args.is_multilabel)
+            data, tokenizer, max_length, multilabel=is_multilabel)
         outfile_name = f'{os.path.basename(args.load)}_{os.path.basename(data).split(".")[0]}'
         outfile = predict_evaluate(exp_path, trainer, dataset, outfile_name)
     return outfile
