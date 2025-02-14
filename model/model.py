@@ -428,16 +428,28 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
                 report_df = classification_report_with_ci(
                     true_labels, pred_labels)
     
-        # Write predictions to file 
-        for d, pred_labels, true_labels, prob in zip(test_dataset, pred_labels, true_labels, probs):
-            id, text, _ = d
-            pred_data.append({
-                "id": id,
-                "text": text,
-                "prediction": pred_labels,
-                "probability": probs,
-                "label": true_labels
-            })
+        # Case 1: True labels are provided
+        if true_labels:
+            for d, pred_labels, true_labels, prob in zip(test_dataset, pred_labels, true_labels, probs):
+                id, text, _ = d
+                pred_data.append({
+                    "id": id,
+                    "text": text,
+                    "prediction": pred_labels,
+                    "probability": probs,
+                    "label": true_labels
+                })
+        # Case 2: Not True labels are provided -> only prediction
+        else:
+            for d, pred_labels, prob in zip(test_dataset, pred_labels, probs):
+                id, text, _ = d
+                pred_data.append({
+                    "id": id,
+                    "text": text,
+                    "prediction": pred_labels,
+                    "probability": probs,
+                })
+
 
     df = pd.DataFrame(pred_data)
     filename = 'test_predictions.csv' if outfile is None else f'{outfile}_predictions.csv'
@@ -478,7 +490,7 @@ def finetune(args: argparse.Namespace) -> None:
     train_dataset, test_dataset, val_dataset = load_data(
         args.data, meta_file, args.model)
     add_params = {
-        'max_length': train_dataset.max_len,
+        'max_length': train_dataset.max_length,
         'is_multilabel': meta_data['Is_multilabel'],
     }
     save_train_args(project_path, args, add_params)
@@ -555,7 +567,7 @@ def load_and_predict(args: argparse.Namespace) -> None:
         is_multilabel = meta_data['Is_multilabel']
         model = MODEL_IDENTIFIER[args.model]
         tokenizer = AutoTokenizer.from_pretrained(model)
-        max_length = args.max_len
+        max_length = args.max_length
         dataset = SimpleDataset(
             data, tokenizer, max_length, multilabel=is_multilabel)
         outfile_name = f'{os.path.basename(args.load)}_{os.path.basename(data).split(".")[0]}'
