@@ -1,6 +1,8 @@
 import pandas as pd
 import json
 
+# Script used to extract the dosages from the NER data for Ben to devise normalisation rules
+
 infile = '/home/vera/Documents/Arbeit/CRS/PsychNER/data/prepared_data/training_round2/ner_bio_966.jsonl'
 
 df = pd.read_json(infile, lines=True)

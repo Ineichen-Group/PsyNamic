@@ -1,6 +1,7 @@
 from prodigy_data_reader import ProdigyDataCollector
 import os
 
+# Script to generate statistics of the trained prodigy data
 
 def descriptive_analysis(list_jsonl: list[str], annotators: list[str], save_path: str, expert_annotator: str, purposes: list[str]) -> None:
     # create path if not exists

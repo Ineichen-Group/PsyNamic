@@ -21,6 +21,7 @@ FIXED_COLUMNS = ['id', 'text', 'annotator', 'source_file']
 # TODO: better solution for fixed columns
 
 
+# General class to read in prodigy exports
 class ProdigyDataReader:
     def __init__(self, jsonl_path: str, annotator: str = 'unkown', purpose=Literal['ner', 'class', 'both']) -> None:
         self.jsonl_path = jsonl_path
@@ -59,6 +60,10 @@ class ProdigyDataReader:
         elif purpose == 'class':
             self._read_all_class()
         elif purpose == 'ner':
+            self._read_all_ner()
+        else:
+            self.purpose = 'both'
+            self._read_all_class()
             self._read_all_ner()
 
         self.df = self.replace_newlines(self.df)
@@ -193,6 +198,20 @@ class ProdigyDataReader:
             return task_filtered_df
 
     def get_label_task_df(self, task_name: str, label_to_int: Union[dict[str], None] = None) -> tuple[dict, pd.DataFrame]:
+        """Get the labels of a specific task as a dataframe. The dataframe will look like this:
+        | id | text   | task_name   | labels
+        |----|--------|------------ |-----------|
+        | 1  | 'text' | 'task_name' | [1, 5, 7] |
+        | 2  | 'text' | 'task_name' | [2]       |
+        ...
+
+        Args:
+            task_name (str): _description_
+            label_to_int (Union[dict[str], None], optional): _description_. Defaults to None.
+
+        Returns:
+            tuple[dict, pd.DataFrame]: _description_
+        """
         if self._is_valid_task(task_name):
             if not label_to_int:
                 label_to_int = {label: index for index,
@@ -486,6 +505,7 @@ class ProdigyDataReader:
         return df.map(lambda x: x.replace('\n', '\\n') if isinstance(x, str) else x)
 
 
+# Class to read in multiple prodigy exports
 class ProdigyDataCollector():
     def __init__(self, list_of_files: list[str], annotators: list[str], expert_annotator='', purposes: list[str] = None) -> None:
         self.expert_annotator = expert_annotator
@@ -962,6 +982,7 @@ class ProdigyDataCollector():
                 print(line)
 
 
+# Class to calculate IAA with Prodigy data
 class ProdigyIAAHelper():
     def __init__(self, list_of_files: list[str], names: list[str] = None, log: str = 'iaa.log') -> None:
         self.prodigy_files = list_of_files
@@ -995,11 +1016,12 @@ class ProdigyIAAHelper():
                 f.write(f'{file} ({name})\n')
 
     def _inspect_rejected(self) -> None:
-        rejected = []
+        sets_rejected = []
         for reader in self.prodigy_readers:
-            rejected.append(reader.rejected)
-
-        sets_rejected = [set(rej) for rej in rejected]
+            # TODO: fix hardcoded name of id column
+            rejected_set = set(r['record_id'] for r in reader.rejected)
+            sets_rejected.append(rejected_set)
+            
 
         agreed_rejected = sets_rejected[0].intersection(*sets_rejected[1:])
         not_agreed_rejected = sets_rejected[0].union(
@@ -1075,7 +1097,6 @@ class ProdigyIAAHelper():
             int_to_label, task_df = self.get_task_df(task)
             readers = self.prodigy_readers if readers is None else readers
             if 'Krippendorff' in measures:
-
                 alpha, low, high = calculate_krippendorff_alpha_with_ci(
                     task_df, 'id', 'reader', task)
                 confidence_interval = high - low

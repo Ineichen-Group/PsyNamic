@@ -1,6 +1,8 @@
 from prodigy_data_reader import ProdigyIAAHelper
 
 
+# The script is used to calculate the inter-annotator agreement (IAA) for the prodigy annotations
+
 def calculate_agreement(files: list[str], names: list[str], data_set_name: str='', save: bool = True):
     log_file = f'data/iaa/iaa_log_{data_set_name}.txt'
     prodigy_aai = ProdigyIAAHelper(
@@ -22,10 +24,10 @@ def calculate_pairwise_agreement(files: list[str], names: list[str], data_set_na
 def first_round_iaa():
     # First round of IAA as of 18.04 session
     files = [
-        'data/prodigy_exports/prodigy_export_ben_50_20240418_20240501_181325.jsonl',
-        'data/prodigy_exports/prodigy_export_pia_50_20240418_20240509_110412.jsonl',
-        'data/prodigy_exports/prodigy_export_bernard_50_20240418_20240516_091455.jsonl',
-        'data/prodigy_exports/prodigy_export_julia_50_20240418_20240516_133214.jsonl'
+        'data/iaa/iaa_round1_50/iaa_annotations/prodigy_export_ben_50_20240418_20240501_181325.jsonl',
+        'data/iaa/iaa_round1_50/iaa_annotations/prodigy_export_pia_50_20240418_20240509_110412.jsonl',
+        'data/iaa/iaa_round1_50/iaa_annotations/prodigy_export_bernard_50_20240418_20240516_091455.jsonl',
+        'data/iaa/iaa_round1_50/iaa_annotations/prodigy_export_julia_50_20240418_20240516_133214.jsonl'
     ]
     names = ['ben', 'pia', 'bernard', 'julia']
     calculate_agreement(files, names, data_set_name='50_20240418')
