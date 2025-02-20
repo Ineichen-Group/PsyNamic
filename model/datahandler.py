@@ -249,7 +249,7 @@ class DataSplitBIO(DataSplit):
                 self.BERT_NER_COL: aligned_labels
             })
 
-        self.df[[ self.BERT_TOKEN_COL, self.WORD_IDS, self.BERT_NER_COL]] = self.df.apply(encode_and_align_row, axis=1)
+        self.df.loc[:, [self.BERT_TOKEN_COL, self.WORD_IDS, self.BERT_NER_COL]] = self.df.apply(encode_and_align_row, axis=1)
 
     def __getitem__(self, idx: int) -> dict:
         tokens = self.df.iloc[idx][self.TOKEN_COL]
@@ -1005,7 +1005,8 @@ class PsyNamicMultiLabel(DataHandler):
 
     def read_in_data(self, data_path: str) -> pd.DataFrame:
         df = pd.read_csv(data_path)
-        label_cols = set(df.columns.to_list()) - set([self.ID_COL, self.TEXT_COL, self.ANNOTATOR_COL, self.FILE_COL])
+        excluded_cols = [self.ID_COL, self.TEXT_COL, self.ANNOTATOR_COL, self.FILE_COL]
+        label_cols = [col for col in df.columns if col not in excluded_cols]
         self.id2label = {i: col for i, col in enumerate(label_cols)}
 
         def to_one_hot_encoded(row):

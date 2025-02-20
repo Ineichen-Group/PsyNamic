@@ -8,6 +8,15 @@ from stride_utils.prodigy import ner_process_file_and_save_to_bio_format
 import re
 
 
+# Script to prepare the data for training which includes
+# - combining all prodigy annotations
+# - creating stratified splits for all tasks
+# - writing meta files
+# - saving the data to csv
+# - removing rejected samples
+# - cleaning the NER data (merging whitespace tokens)
+# - cleaning the classification data (handling duplicates, removing unannotated samples)
+
 def prepare_train_data(prodigy_data: ProdigyDataCollector, outpath: str) -> None:
     """Prepare unsplit data for training, e.g. save to csv and write meta file"""
     if not outpath:
