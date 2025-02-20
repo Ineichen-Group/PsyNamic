@@ -1,13 +1,13 @@
 {
     "Task": "PsyNamicMultiLabel",
-    "Date": "20250109",
+    "Date": "20250220",
     "Int_to_label": {
-        "0": "Unknown",
-        "1": "Not Applicable",
-        "2": "Positive",
-        "3": "Negative",
-        "4": "Neutral",
-        "5": "Mixed"
+        "0": "Positive",
+        "1": "Negative",
+        "2": "Neutral",
+        "3": "Mixed",
+        "4": "Unknown",
+        "5": "Not Applicable"
     },
     "Train_size": 768,
     "Use_val": true,
