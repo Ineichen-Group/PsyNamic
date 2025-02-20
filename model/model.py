@@ -312,7 +312,7 @@ def train(
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
         eval_strategy="epoch" if val_dataset is not None else "no",
-        save_strategy="epoch",
+        save_strategy="best",
         load_best_model_at_end=True,
         report_to='wandb',
         logging_dir=project_dir,
@@ -321,6 +321,7 @@ def train(
         resume_from_checkpoint=args.load if resume_from_checkpoint else None,
         metric_for_best_model='eval_loss' if val_dataset is not None else None,
         use_cpu=device_name == 'cpu',
+        load_best_model_at_end=True,
     )
 
     total_steps = len(train_dataset) * args.epochs
@@ -453,7 +454,8 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
         if isinstance(true_labels, np.ndarray):
             for d, pred_labels, true_labels, prob in zip(test_dataset, pred_labels, true_labels, probs):
                 if not valid_mapping:
-                    true_labels_strings = [id2label_test[i] for i in true_labels]
+                    true_labels_strings = [id2label_test[str(int(i))] for i in true_labels]
+                    breakpoint()
                     # convert to model label mapping
                     label2id_model = {v: k for k, v in id2label_model.items()}
                     true_labels = [label2id_model[l] for l in true_labels_strings]
@@ -577,10 +579,12 @@ def load_and_predict(args: argparse.Namespace) -> None:
         dataset = load_data(
             args.data, data_meta_file, args.model)[1]
         outfile_name = f'{os.path.basename(args.load)}_test_split'
+
         # Find the label mappings to check the data and the model have the same label mapping
         model_params = json.load(
             open(os.path.join(exp_path, 'params.json'), 'r'))
         train_data_meta_file = os.path.join(model_params['data'], 'meta.json')
+        
         if not os.path.exists(train_data_meta_file):
             raise ValueError(
                 'It could not automatically checked whether model and test split have the same label mapping.')
