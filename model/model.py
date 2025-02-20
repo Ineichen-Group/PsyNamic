@@ -36,7 +36,7 @@ from transformers.trainer_utils import PredictionOutput
 ############################################################################################################
 # some globals to set
 EXPERIMENT_PATH = './model/experiments'
-os.environ['WANDB_PROJECT'] = "psynamic"  # Used for logging to wandb
+os.environ['WANDB_PROJECT'] = "psynamic" # Used for logging to wandb
 ############################################################################################################
 
 
@@ -132,7 +132,7 @@ def compute_multilabel_metrics(pred: PredictionOutput, threshold: float = 0.5, a
 
 def compute_bio_metrics(p: PredictionOutput, label_list: list[str]) -> dict[str, float]:
     """Compute metrics for NER tasks, to be passed to the Trainer.
-
+    
         -100 is for special tokens such as [CLS], [SEP], [PAD], [MASK]
     """
     predictions, labels = p
@@ -146,14 +146,12 @@ def compute_bio_metrics(p: PredictionOutput, label_list: list[str]) -> dict[str,
         [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
         for prediction, label in zip(predictions, labels)
     ]
-
-    return bio_metrics(true_labels, pred_labels)
+    
+    return bio_metrics(true_labels, pred_labels)    
 
 ############################################################################################################
 # COMMAND LINE INTERFACE
 ############################################################################################################
-
-
 def init_argparse():
     parser = argparse.ArgumentParser()
 
@@ -364,7 +362,7 @@ def train(
     return trainer
 
 
-def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[DataSplit, DataSplitBIO], outfile: str = None, threshold: float = 0.5, id2label_test: dict[str] = None, id2label_model: dict[str] = None) -> tuple[str, Union[str, None]]:
+def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[DataSplit, DataSplitBIO], outfile: str = None, threshold: float=0.5) -> tuple[str, Union[str, None]]:
     """ Predicts the labels for the test split or any other dataset and saves predictions and metrics to a file.
         In case its only prediction and true labels are not provided, only the predictions will be saved.
 
@@ -378,58 +376,39 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
     Returns:
         str: outfile path
     """
-    valid_mapping = True
-    if id2label_model and id2label_test:
-        labels_model = set(id2label_model.values())
-        labels_test = set(id2label_test.values())
-        if labels_model != labels_test:
-            raise ValueError(
-                f'The labels of the model and the test data are not the same as the model was trained on\nModel: {labels_model}\nTest: {labels_test}')
-        # check if the label mappings are the same
-        for id, label in id2label_model.items():
-            if id2label_test.get(id) != label:
-                valid_mapping = False
-                print('Warning: Label mappings are not the same, will be remapped to the model label mapping')
-
-
     predictions = trainer.predict(test_dataset)
-
+    
+    
     # If the true labels are provided, compute metrics
     try:
         metrics = predictions.metrics
     except:
         metrics = None
     report_df = None
-
+    
     # Collect prediction, probability and true labels
     pred_data = []
-
+    
     # NER --> token level classifciation
     if isinstance(test_dataset, DataSplitBIO):
-        if not valid_mapping:
-            raise ValueError('Label mappings are not the same, remapping is not implemented for NER tasks')
-        probs_incl_spec = F.softmax(
-            torch.Tensor(predictions.predictions), dim=2)
+        probs_incl_spec = F.softmax(torch.Tensor(predictions.predictions), dim=2)
         pred_labels_idx = np.argmax(predictions.predictions, axis=2)
 
         for true_l, pred_l, prob, data in zip(predictions.label_ids, pred_labels_idx, probs_incl_spec, test_dataset):
             id_, tokens, _ = data
             if not (len(true_l) == len(pred_l) == len(prob) == len(tokens)):
-                raise ValueError(
-                    'Lengths of predictions, true labels and probabilities do not match')
+                raise ValueError('Lengths of predictions, true labels and probabilities do not match')
             # iterate over tokens
             for t, p, pr, token in zip(true_l, pred_l, prob, tokens):
                 if t != -100:
                     pred_data.append({
                         "id": id_,
                         "token": token,
-                        # Get the human-readable label from the label index
-                        "prediction": test_dataset.labels[p],
+                        "prediction": test_dataset.labels[p],  # Get the human-readable label from the label index
                         "probability": pr.tolist(),
-                        # True label for the token
-                        "label": test_dataset.labels[t]
+                        "label": test_dataset.labels[t]  # True label for the token
                     })
-
+            
     # Abstract classification
     else:
         # Case 1: Multilabel classification
@@ -438,28 +417,21 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
             true_labels = predictions.label_ids
             pred_labels = np.zeros(probs.shape)
             pred_labels[np.where(probs >= threshold)] = 1
-
+ 
         # Case 2: Single-label classification
         else:
             true_labels = predictions.label_ids
             probs = predictions.predictions
             pred_labels = np.argmax(probs, axis=1)
-
+            
             # Case 1: True labels are provided
             if metrics:
                 report_df = classification_report_with_ci(
                     true_labels, pred_labels)
-
+    
         # Case 1: True labels are provided
-        if isinstance(true_labels, np.ndarray):
+        if true_labels:
             for d, pred_labels, true_labels, prob in zip(test_dataset, pred_labels, true_labels, probs):
-                if not valid_mapping:
-                    true_labels_strings = [id2label_test[str(int(i))] for i in true_labels]
-                    breakpoint()
-                    # convert to model label mapping
-                    label2id_model = {v: k for k, v in id2label_model.items()}
-                    true_labels = [label2id_model[l] for l in true_labels_strings]
-
                 id, text, _ = d
                 pred_data.append({
                     "id": id,
@@ -479,23 +451,24 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
                     "probability": probs,
                 })
 
+
     df = pd.DataFrame(pred_data)
     filename = 'test_predictions.csv' if outfile is None else f'{outfile}_predictions.csv'
     pred_file = os.path.join(project_folder, filename)
     df.to_csv(pred_file, index=False)
-
+    
     # If true labels are provided and metrics are computed, write metrics to file
     if metrics:
         filename = 'test_eval.csv' if outfile is None else f'{outfile}_eval.csv'
         eval_file = os.path.join(project_folder, filename)
-        # Write metrics to file
+        # Write metrics to file 
         with open(eval_file, 'w', encoding='utf-8') as f:
             json.dump(metrics, f)
             if report_df is not None:
                 # append classification report dataframe to metrics.json, convert to dict
                 report_dict = report_df.to_dict()
                 json.dump(report_dict, f)
-
+                
     else:
         eval_file = None
     return pred_file, eval_file
@@ -503,8 +476,6 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
 ############################################################################################################
 # 4 MODES: train, cont_train, eval, pred
 ############################################################################################################
-
-
 def finetune(args: argparse.Namespace) -> None:
     """ Finetune a pretrained BERT model on a given dataset, where the splits were created by the DataHandler.
         Example call for MODE='train' e.g. python model/model.py --model pubmedbert --data data/prepared_data/asreview_dataset_all --task 'Relevant Sample'
@@ -556,7 +527,7 @@ def load_and_evaluate(args: argparse.Namespace) -> str:
 
     test_dataset = load_data(
         args.data, data_meta_file, args.model)[1]
-
+    
     predict_evaluate(exp_path, trainer, test_dataset, args.task)
 
 
@@ -572,30 +543,14 @@ def load_and_predict(args: argparse.Namespace) -> None:
     args = set_args_from_file(args)
     trainer = load_model(args)
     exp_path = os.path.dirname(args.load)
-
+    
     # Case 1: Test split of training used
-    if os.path.isdir(args.data):
+    if args.data is None:
         data_meta_file = os.path.join(args.data, 'meta.json')
         dataset = load_data(
             args.data, data_meta_file, args.model)[1]
         outfile_name = f'{os.path.basename(args.load)}_test_split'
-
-        # Find the label mappings to check the data and the model have the same label mapping
-        model_params = json.load(
-            open(os.path.join(exp_path, 'params.json'), 'r'))
-        train_data_meta_file = os.path.join(model_params['data'], 'meta.json')
-        
-        if not os.path.exists(train_data_meta_file):
-            raise ValueError(
-                'It could not automatically checked whether model and test split have the same label mapping.')
-        train_data_meta_data = json.load(
-            open(train_data_meta_file, 'r', encoding='utf-8'))
-        id2label_model = train_data_meta_data['Int_to_label']
-        id2label_test = json.load(
-            open(data_meta_file, 'r', encoding='utf-8'))['Int_to_label']
-
-        outfile = predict_evaluate(
-            exp_path, trainer, dataset, outfile_name, id2label_test=id2label_test, id2label_model=id2label_model)
+        outfile = predict_evaluate(exp_path, trainer, dataset, outfile_name)
     else:
         if os.path.isfile(args.data):
             data = args.data
