@@ -611,7 +611,7 @@ class ProdigyDataCollector():
     def nr_rejected(self) -> int:
         nested_rejected = [reader.rejected for reader in self.prodigy_readers]
         rejected = [item for sublist in nested_rejected for item in sublist]
-        ids = [r['id'] for r in rejected]
+        ids = [r['record_id'] for r in rejected]
         return len(set(ids))
 
     @property
@@ -967,7 +967,7 @@ class ProdigyDataCollector():
         report_lines.append(f'Total number of duplicates: {
                             len(self.duplicates)}')
         report_lines.append(f'Duplicates: {self.duplicates}')
-        ids = self.rejected['id'].to_list()
+        ids = self.rejected['record_id'].to_list()
         report_lines.append(f'Rejected samples: {ids}')
 
         if save_path:
