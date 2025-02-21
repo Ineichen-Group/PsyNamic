@@ -43,7 +43,6 @@ os.environ['WANDB_PROJECT'] = "psynamic"  # Used for logging to wandb
 
 def set_seed(seed: int):
     """Set all seeds to ensure reproducibility."""
-    random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
