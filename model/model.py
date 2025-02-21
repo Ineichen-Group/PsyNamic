@@ -41,6 +41,15 @@ os.environ['WANDB_PROJECT'] = "psynamic"  # Used for logging to wandb
 ############################################################################################################
 
 
+def set_seed(seed: int):
+    """Set all seeds to ensure reproducibility."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
 ############################################################################################################
 # METRICS
 ############################################################################################################
@@ -288,6 +297,9 @@ def train(
     resume_from_checkpoint: bool = False,
     is_multilabel: bool = False,
 ) -> Trainer:
+
+    set_seed(seed=42)
+
     device_name = args.device if torch.cuda.is_available() else 'cpu'
     device = torch.device(device_name)
     problem_type = "single_label_classification" if not is_multilabel else "multi_label_classification"
