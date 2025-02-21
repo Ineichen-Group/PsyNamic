@@ -18,6 +18,7 @@ from sklearn.metrics import (accuracy_score, f1_score, precision_score,
 from torch.optim import AdamW
 from transformers import (AutoModelForSequenceClassification,
                           AutoModelForTokenClassification, AutoTokenizer,
+                          AutoConfig,
                           BertForSequenceClassification,
                           BertForTokenClassification,
                           EarlyStoppingCallback, Trainer, TrainingArguments,
@@ -48,8 +49,10 @@ def singlelabel_metrics(true_labels: list[int], pred_labels: list[int]) -> dict[
     accuracy = accuracy_score(true_labels, pred_labels)
     precision = precision_score(
         true_labels, pred_labels, average='weighted', zero_division=0)
-    recall = recall_score(true_labels, pred_labels, average='weighted')
-    f1 = f1_score(true_labels, pred_labels, average='weighted', zero_division=0)
+    recall = recall_score(true_labels, pred_labels,
+                          average='weighted', zero_division=0)
+    f1 = f1_score(true_labels, pred_labels,
+                  average='weighted', zero_division=0)
     return {
         'accuracy': accuracy,
         'precision': precision,
@@ -63,8 +66,10 @@ def multilabel_metrics(true_labels: np.ndarray, pred_labels: np.ndarray) -> dict
     accuracy = accuracy_score(true_labels, pred_labels)
     precision = precision_score(
         true_labels, pred_labels, average='weighted', zero_division=0)
-    recall = recall_score(true_labels, pred_labels, average='weighted')
-    f1 = f1_score(true_labels, pred_labels, average='weighted', zero_division=0)
+    recall = recall_score(true_labels, pred_labels,
+                          average='weighted', zero_division=0)
+    f1 = f1_score(true_labels, pred_labels,
+                  average='weighted', zero_division=0)
     return {
         'accuracy': accuracy,
         'precision': precision,
@@ -287,24 +292,45 @@ def train(
     device = torch.device(device_name)
     problem_type = "single_label_classification" if not is_multilabel else "multi_label_classification"
 
+
     # Load checkpoint or initialize model
     if resume_from_checkpoint:
+        # Load from checkpoint
+        config = AutoConfig.from_pretrained(
+            args.load,
+            label2id=train_dataset.label2id,
+            id2label=train_dataset.id2label,
+            num_labels=train_dataset.nr_labels,
+            problem_type=problem_type
+        )
         tokenizer = AutoTokenizer.from_pretrained(args.load)
+
         if 'NER' in args.task:
             model = AutoModelForTokenClassification.from_pretrained(
-                args.load).to(device)
+                args.load, config=config).to(device)
         else:
             model = AutoModelForSequenceClassification.from_pretrained(
-                args.load, problem_type=problem_type).to(device)
+                args.load, config=config).to(device)
+
     else:
+        # Initialize new model
         model_id = MODEL_IDENTIFIER[args.model]
+
+        config = AutoConfig.from_pretrained(
+            model_id,
+            label2id=train_dataset.label2id,
+            id2label=train_dataset.id2label,
+            num_labels=train_dataset.nr_labels,
+            problem_type=problem_type
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
+
         if 'NER' in args.task:
             model = BertForTokenClassification.from_pretrained(
-                model_id, num_labels=train_dataset.nr_labels).to(device)
+                model_id, config=config).to(device)
         else:
             model = BertForSequenceClassification.from_pretrained(
-                model_id, num_labels=train_dataset.nr_labels, problem_type=problem_type).to(device)
+                model_id, config=config).to(device)
 
     training_args = TrainingArguments(
         output_dir=project_dir,
@@ -516,7 +542,7 @@ def cont_finetune(args: argparse.Namespace) -> None:
     train_dataset, test_dataset, eval_dataloader = load_data(
         args.data, meta_file, args.model)
     trainer = train(args.load, train_dataset,
-                    args, resume_from_checkpoint=True, is_multilabel=meta_data['Is_multilabel'], task=meta_data['Task'])
+                    args, resume_from_checkpoint=True, is_multilabel=meta_data['Is_multilabel'])
     predict_evaluate(args.load, trainer, test_dataset)
 
 
