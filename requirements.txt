@@ -1,6 +1,6 @@
 accelerate>=0.32.0
 evaluate>=0.4.0
-git+https://github.com/Ineichen-Group/stride_utils.git@v0.7.7
+git+https://github.com/Ineichen-Group/stride_utils.git
 git+https://github.com/jacobgil/confidenceinterval.git
 iterative-stratification>=0.1.0
 nltk>=3.8.0
