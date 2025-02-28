@@ -3,79 +3,122 @@ import json
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
+import re
 
-models = [
-    "pubmedbert",
-    "biomedbert-abstract",
-    "scibert",
-    "biobert",
-    "clinicalbert",
-    "biolinkbert"
-]
 
-# List of tasks
-tasks = [
-    "Data Collection", "Data Type", "Number of Participants", "Age of Participants", "Application Form",
-    "Clinical Trial Phase", "Condition", "Outcomes", "Regimen", "Setting", "Study Control", "Study Purpose",
-    "Substance Naivety", "Substances", "Sex of Participants", "Study Conclusion", "Study Type", "NER Bio",
-    "Relevant"
-]
+def make_model_comparison_plot():
+    models = [
+        "pubmedbert",
+        "biomedbert-abstract",
+        "scibert",
+        "biobert",
+        "clinicalbert",
+        "biolinkbert"
+    ]
 
-experiments_path = 'model/experiments'
-date = '20250221'
+    # List of tasks
+    tasks = [
+        "Data Collection", "Data Type", "Number of Participants", "Age of Participants", "Application Form",
+        "Clinical Trial Phase", "Condition", "Outcomes", "Regimen", "Setting", "Study Control", "Study Purpose",
+        "Substance Naivety", "Substances", "Sex of Participants", "Study Conclusion", "Study Type", "NER Bio",
+        "Relevant"
+    ]
 
-task_model_performance = {}
-for task in tasks:
-    task_ident = task.replace(' ', '_').lower()
-    model_performance = {}
-    for model in models:
-        exp_dir = f'{model}_{task_ident}_{date}'
-        exp_dir_path = os.path.join(experiments_path, exp_dir)
-        if not os.path.exists(exp_dir_path):
-            raise ValueError(f'Experiment directory {exp_dir_path} does not exist')
+    experiments_path = '/home/vebern/scratch/PsyNamic/model/experiments'
+    date = '20250221'
+
+    task_model_performance = {}
+    for task in tasks:
+        task_ident = task.replace(' ', '_').lower()
+        model_performance = {}
+        for model in models:
+            exp_dir = f'{model}_{task_ident}_{date}'
+            exp_dir_path = os.path.join(experiments_path, exp_dir)
+            eval_file = os.path.join(exp_dir_path, 'test_eval.csv')
+            if task == 'Substances':
+                continue
+            if task == 'NER Bio':
+                continue
+            if not os.path.exists(eval_file):
+                print(f'{eval_file} does not exist')
+                continue
+            with open(eval_file, 'r', encoding='utf-8') as file:
+                try:
+                    eval_data = json.load(file)
+                except json.JSONDecodeError:
+                    file.seek(0)
+                    content = file.read()
+                    json_objects = re.findall(r'{[^{}]*}', content)
+                    data_objects = [json.loads(obj) for obj in json_objects]
+                    eval_data = data_objects[0]
+                model_performance[model] = eval_data['test_f1']
+        task_model_performance[task] = model_performance
+
+    # Create a figure and axes for the subplots
+    num_tasks = len(task_model_performance)
+    num_columns = 3  # You can adjust this to change the number of columns in the grid
+    num_rows = (num_tasks // num_columns) + (1 if num_tasks % num_columns != 0 else 0)
+
+    # Set the size of the figure
+    fig, axes = plt.subplots(num_rows, num_columns, figsize=(15, 6 * num_rows))
+
+    # Flatten axes array for easier iteration
+    axes = axes.flatten()
+
+    # Define custom colors for each model (optional)
+    model_colors = {
+        "pubmedbert": "#1f77b4",  # Blue
+        "biomedbert-abstract": "#ff7f0e",  # Orange
+        "scibert": "#2ca02c",  # Green
+        "biobert": "#d62728",  # Red
+        "clinicalbert": "#9467bd",  # Purple
+        "biolinkbert": "#8c564b"  # Brown
+    }
+
+    # Loop through each task and create a bar plot for each task
+    for i, (task, model_performance) in enumerate(task_model_performance.items()):
+        task_data = pd.DataFrame(model_performance.items(), columns=['Model', 'F1 Score'])
+
+        if task_data.empty:
+            print(f"Skipping {task} because it has no valid data.")
+            continue
         
-        eval_file = os.path.join(exp_dir_path, 'test_eval.csv')
-        with open(eval_file, 'r') as file:
-            eval_data = json.load(file)
-            model_performance[model] = eval_data['f1']
+        max_model = task_data.loc[task_data['F1 Score'].idxmax(), 'Model']
 
-    task_model_performance[task] = model_performance
+        # Create a color mapping where the highest model gets its original color, and others are grey
+        bar_colors = [
+            model_colors[model] if model == max_model else "grey" for model in task_data['Model']
+        ]
 
-# Convert the data into a pandas DataFrame for easy plotting
-data = []
+        # Plot with custom colors
+        sns.barplot(x='Model', y='F1 Score', hue='Model', data=task_data, ax=axes[i], palette=bar_colors, legend=False)
 
-for task, model_performance in task_model_performance.items():
-    for model, f1_score in model_performance.items():
-        data.append({
-            'Task': task,
-            'Model': model,
-            'F1 Score': f1_score
-        })
+        # Add value labels on top of bars
+        for container in axes[i].containers:
+            for p in container:
+                height = p.get_height()
+                if height > 0:  # Ensure only valid bars are labeled
+                    axes[i].text(p.get_x() + p.get_width() / 2., height + 0.02,  
+                                f'{height:.2f}', ha='center', va='bottom', fontsize=10, color='black')
 
-df = pd.DataFrame(data)
 
-# Define a consistent color palette for the models
-palette = sns.color_palette("Set2", len(models))  # You can choose any palette you prefer
 
-# Plot separate bar graphs for each task
-n_tasks = len(tasks)
-n_cols = 3  # Number of columns per row of plots
-n_rows = (n_tasks // n_cols) + (n_tasks % n_cols)
+        axes[i].set_title(task)
+        axes[i].tick_params(axis='x', rotation=45)
+        axes[i].set_ylabel('F1 Score')
+        axes[i].set_xlabel('Model')
+        axes[i].set_ylim(0, 1)
 
-fig, axes = plt.subplots(n_rows, n_cols, figsize=(18, 5 * n_rows))
-axes = axes.flatten()  # Flatten the axes array to make it easier to work with
+    # Hide any unused axes (if num_tasks is less than the number of subplots)
+    for j in range(num_tasks, len(axes)):
+        axes[j].axis('off')
 
-# Create a barplot for each task
-for i, task in enumerate(tasks):
-    task_data = df[df['Task'] == task]
-    sns.barplot(x='Model', y='F1 Score', data=task_data, ax=axes[i], palette=palette)
-    axes[i].set_title(f'Performance for {task}')
-    axes[i].set_xticklabels(axes[i].get_xticklabels(), rotation=45, ha='right')
+    # Adjust layout to make sure the labels don't overlap
+    plt.tight_layout()
 
-# Hide any unused axes
-for j in range(i + 1, len(axes)):
-    axes[j].axis('off')
+    # Save the plot to a file
+    plt.savefig('model_performance_task_plots.png', bbox_inches='tight')  # Save to PNG file
 
-# Adjust layout and display the plot
-plt.tight_layout()
-plt.show()
+
+def get_f1_ci(test_pred_file: str):
+    pred_df = pd.from_csv()
