@@ -138,6 +138,8 @@ def main():
     all_abstracts = []
     count = 0
 
+    start_time = time.time()
+
     while True:
         xml_data = get_pubmed_data(search_string_with_date, retstart=start)
         if xml_data:
@@ -170,10 +172,13 @@ def main():
                 break
         else:
             break
-
+    
+    end_time = time.time()
+    # duration in format hh:mm:ss
+    duration = time.strftime("%H:%M:%S", time.gmtime(end_time - start_time))
     df = pd.DataFrame(all_abstracts)
     today = time.strftime("%Y/%m/%d")
-    outfile = os.path.join(dir_path, f'pubmed_results_{today.replace("/", "")}.csv')
+    outfile = os.path.join(dir_path, f'pubmed_results_{today.replace("/", "")}_{duration}.csv')
     df.to_csv(outfile, index=False, encoding='utf-8')
 
     with open(date_file, 'w', encoding='utf-8') as f:
