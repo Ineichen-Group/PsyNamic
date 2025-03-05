@@ -240,6 +240,19 @@ def add_missing_annotation_log() -> None:
     new_log_path = os.path.join(ANNOTATION_DIR, new_log)
     log_df.to_csv(new_log_path, index=False)
 
+def extract_pubmed_id(csv_file: str) -> None:
+
+    def pubmed_url_to_id(url: str):
+        # if nan return empty string
+        if pd.isna(url):
+            return ''
+        id = url.split('/')[-2]
+        return id
+
+    with open(csv_file, 'r', encoding='utf-8') as infile:
+        df = pd.read_csv(infile)
+        df['pubmed_id'] = df['pubmed_url'].apply(lambda x: pubmed_url_to_id(x))
+        df.to_csv(csv_file, index=False)
 def main():
 
     # Load the raw data and prepare it
@@ -341,8 +354,8 @@ def main():
     #     'prodigy_exports/prodigy_export_julia_110_20240423_113435_20240812_012727.jsonl')
     # annotation_progress()
 
-    add_missing_annotation_log()
-
+    # add_missing_annotation_log()
+    extract_pubmed_id('data/raw_data/dataset_relevant_cleaned.csv')
 
 if __name__ == '__main__':
 
