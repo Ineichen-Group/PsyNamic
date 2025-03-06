@@ -177,7 +177,7 @@ def main():
     # duration in format hh:mm:ss
     duration = time.strftime("%H:%M:%S", time.gmtime(end_time - start_time))
     df = pd.DataFrame(all_abstracts)
-    df['text'] = df['title'] + '.^\n' + df['abstract']
+    df['text'] = df['title'] + '^\n' + df['abstract']
     today = time.strftime("%Y/%m/%d")
     outfile = os.path.join(dir_path, f'pubmed_results_{today.replace("/", "")}_{duration}.csv')
     df.to_csv(outfile, index=False, encoding='utf-8')
