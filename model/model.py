@@ -198,6 +198,8 @@ def init_argparse():
     # CONT_TRAIN
     parser.add_argument('--load', type=str, default=None)  # Experiment folder
 
+    # PRED/EVAL:
+    parser.add_argument('--outfile', type=str, default=None)
     return parser.parse_args()
 
 
@@ -471,26 +473,25 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
                     true_labels, pred_labels)
 
         # Case 1: True labels are provided
-        #  check if true labels is empty array
-        if true_labels.size > 0:
+        if predictions.label_ids is not None:
             for d, pred_labels, true_labels, prob in zip(test_dataset, pred_labels, true_labels, probs):
-                id, text, _ = d
+                id_, text, _ = d
                 pred_data.append({
-                    "id": id,
+                    "id": id_,
                     "text": text,
-                    "prediction": pred_labels,
-                    "probability": probs,
-                    "label": true_labels
+                    "prediction": pred_labels.tolist(),
+                    "probability": prob.tolist(),
+                    "label": true_labels.tolist()
                 })
         # Case 2: Not True labels are provided -> only prediction
         else:
             for d, pred_labels, prob in zip(test_dataset, pred_labels, probs):
-                id, text, _ = d
+                id_, text, _ = d
                 pred_data.append({
-                    "id": id,
+                    "id": id_,
                     "text": text,
-                    "prediction": pred_labels,
-                    "probability": probs,
+                    "prediction": pred_labels.tolist(),
+                    "probability": prob.tolist(),
                 })
 
     df = pd.DataFrame(pred_data)
@@ -571,7 +572,7 @@ def load_and_evaluate(args: argparse.Namespace) -> str:
     test_dataset = load_data(
         args.data, data_meta_file, args.model)[1]
 
-    predict_evaluate(exp_path, trainer, test_dataset, args.task)
+    predict_evaluate(exp_path, trainer, test_dataset, outfile=args.outfile)
 
 
 def load_and_predict(args: argparse.Namespace) -> None:
