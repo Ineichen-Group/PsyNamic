@@ -3,7 +3,6 @@ import json
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pandas as pd
-import re
 import numpy as np
 from confidenceinterval.bootstrap import bootstrap_ci
 from sklearn.metrics import (
@@ -140,15 +139,15 @@ def precision_recall_curve(true_labels: np.ndarray, pred_probs: np.ndarray, is_m
 
     precision_at_max_f1 = precisions[max_f1_idx]
 
-    acceptible_precision = recalls[max_f1_idx]
-    acceptible_precision_i = max_f1_idx
+    acceptable_precision = recalls[max_f1_idx]
+    acceptable_precision_i = max_f1_idx
     for i in range(max_f1_idx, 0, -1):
         if precisions[i] >= precision_at_max_f1 - 0.05:
-            acceptible_precision = precisions[i]
-            acceptible_precision_i = i
+            acceptable_precision = precisions[i]
+            acceptable_precision_i = i
         else:
             break
-    ax.axvline(x=thresholds[acceptible_precision_i], color='red',
+    ax.axvline(x=thresholds[acceptable_precision_i], color='red',
                linestyle=':', label='Optimization for higher recall')
 
     ax.legend(loc="lower left")
