@@ -194,6 +194,7 @@ def init_argparse():
     parser.add_argument('--gradient_clipping', type=float, default=0.1)
     parser.add_argument('--device', type=str,
                         choices=['cpu', 'cuda'], default='cuda')
+    parser.add_argument('--max_length', type=int, default=512)
 
     # CONT_TRAIN
     parser.add_argument('--load', type=str, default=None)  # Experiment folder
@@ -250,13 +251,18 @@ def load_model(args: argparse.Namespace) -> Trainer:
     if 'NER' in args.task:
         model = AutoModelForTokenClassification.from_pretrained(
             args.load).to(device)
+        metrics = compute_bio_metrics
     else:
         model = AutoModelForSequenceClassification.from_pretrained(
             args.load).to(device)
     tokenizer = AutoTokenizer.from_pretrained(args.load)
+    if args.is_multilabel:
+        metrics = compute_multilabel_metrics
+    else:
+        metrics = compute_singlelabel_metrics    
     trainer = Trainer(
         model=model,
-        compute_metrics=compute_multilabel_metrics,
+        compute_metrics=metrics,
         tokenizer=tokenizer)
     return trainer
 
@@ -464,8 +470,14 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
         # Case 2: Single-label classification
         else:
             true_labels = predictions.label_ids
-            probs = predictions.predictions
-            pred_labels = np.argmax(probs, axis=1)
+            logits = torch.Tensor(predictions.predictions)
+            if logits.ndim == 1:
+                probs = F.softmax(logits, dim=0).numpy()
+                pred_labels = np.argmax(probs)
+            else:
+                probs = F.softmax(logits, dim=1).numpy()
+                pred_labels = np.argmax(probs, axis=1)
+
 
             # Case 1: True labels are provided
             if metrics:
@@ -535,7 +547,6 @@ def finetune(args: argparse.Namespace) -> None:
     train_dataset, test_dataset, val_dataset = load_data(
         args.data, meta_file, args.model)
     add_params = {
-        'max_length': train_dataset.max_len,
         'is_multilabel': meta_data['Is_multilabel'],
     }
     save_train_args(project_path, args, add_params)
@@ -571,7 +582,7 @@ def load_and_evaluate(args: argparse.Namespace) -> str:
 
     test_dataset = load_data(
         args.data, data_meta_file, args.model)[1]
-
+    
     predict_evaluate(exp_path, trainer, test_dataset, outfile=args.outfile)
 
 
@@ -612,9 +623,8 @@ def load_and_predict(args: argparse.Namespace) -> None:
         is_multilabel = meta_data['Is_multilabel']
         model = MODEL_IDENTIFIER[args.model]
         tokenizer = AutoTokenizer.from_pretrained(model)
-        max_length = args.max_length
         dataset = SimpleDataset(
-            data, tokenizer, max_length, multilabel=is_multilabel)
+            data, tokenizer, args.max_length, multilabel=is_multilabel)
         outfile_name = f'{os.path.basename(args.load)}_{os.path.basename(data).split(".")[0]}'
         outfile = predict_evaluate(exp_path, trainer, dataset, outfile_name)
     return outfile
