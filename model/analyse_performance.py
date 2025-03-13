@@ -34,10 +34,12 @@ def extract_predictions(test_pred_file: str, is_multilabel: bool, threshold: flo
         lambda x: np.array(eval(x)))
     if is_multilabel:
         pred_df["label"] = pred_df["label"].apply(lambda x: np.array(eval(x)))
-        pred_df["prediction"] = pred_df["prediction"].apply(lambda x: np.array(eval(x)))
+        pred_df["prediction"] = pred_df["prediction"].apply(
+            lambda x: np.array(eval(x)))
     else:
         pred_df["label"] = pred_df["label"].apply(lambda x: np.array(x))
-        pred_df["prediction"] = pred_df["prediction"].apply(lambda x: np.array(x))
+        pred_df["prediction"] = pred_df["prediction"].apply(
+            lambda x: np.array(x))
 
     y_pred = np.stack(pred_df["prediction"].values)
     probs = np.stack(pred_df["probability"].values)
@@ -103,7 +105,7 @@ def custom_recall(true_labels, pred_labels):
     return recall_score(true_labels, pred_labels, average="weighted", zero_division=0)
 
 
-def precision_recall_curve(true_labels: np.ndarray, pred_probs: np.ndarray, is_multilabel: bool, task: str, ax=None, save_path=None, nr_thresholds=50):
+def precision_recall_curve(true_labels: np.ndarray, pred_probs: np.ndarray, is_multilabel: bool, task: str, ax=None, save_path=None, nr_thresholds=50, best_model: str = ''):
     """Produces a precision recal curve"""
     precisions = []
     recalls = []
@@ -130,7 +132,8 @@ def precision_recall_curve(true_labels: np.ndarray, pred_probs: np.ndarray, is_m
 
     ax.set_xlabel("Threshold")
     ax.set_ylabel("Score")
-    ax.set_title(f"Precision, Recall & F1 at Varying Thresholds for {task}")
+    ax.set_title(
+        f"Performance at Varying Thresholds for {task} by {best_model}")
 
     max_f1_idx = np.argmax(f1_scores)
     max_f1_threshold = thresholds[max_f1_idx]
@@ -148,7 +151,12 @@ def precision_recall_curve(true_labels: np.ndarray, pred_probs: np.ndarray, is_m
         else:
             break
     ax.axvline(x=thresholds[acceptable_precision_i], color='red',
-               linestyle=':', label='Optimization for higher recall')
+               linestyle=':', label='Optimization for higher recall, -5%')
+
+    ax.scatter([thresholds[acceptable_precision_i]], [
+               acceptable_precision], color='red', zorder=3)
+    ax.text(thresholds[acceptable_precision_i], acceptable_precision, f'Th={thresholds[acceptable_precision_i]:.2f}',
+            verticalalignment='bottom', horizontalalignment='right', color='red', fontsize=10)
 
     ax.legend(loc="lower left")
 
@@ -158,23 +166,50 @@ def precision_recall_curve(true_labels: np.ndarray, pred_probs: np.ndarray, is_m
     return ax
 
 
-def plot_precision_recall_curve_all_tasks(task_model_performance: dict, save_dir: str):
+def plot_precision_recall_curve_all_tasks(task_model_performance: dict, save_dir: str) -> dict:
     """Creates a multiplot of all precision recall plots for all multilabel cases"""
     ncols = 3
     nrows = math.ceil(len(task_model_performance) / ncols)
     fig, axes = plt.subplots(nrows, ncols, figsize=(8 * ncols, 5 * nrows))
     axes = axes.flatten()
+    best_models_task = {}
 
     for i, (task, _) in enumerate(task_model_performance.items()):
         ax = axes[i]
-        best_model = task_model_performance[task].loc[task_model_performance[task]['F1'].idxmax(
-        )]
-        best_model = best_model['Model']
+        best_models = task_model_performance[task][task_model_performance[task]
+                                                   ['F1'] == task_model_performance[task]['F1'].max()].copy()
+
+        if len(best_models) > 1:
+            print(
+                f"\nMultiple models have the highest F1 score for task: {task}")
+
+            # Create a numbered list from 1 onwards
+            model_choices = list(best_models.itertuples(index=False))
+            for idx, row in enumerate(model_choices, start=1):
+                print(f"{idx}: {row.Model} (F1: {row.F1:.4f})")
+
+            while True:
+                try:
+                    choice = int(
+                        input(f"Select a model for {task} (1-{len(model_choices)}): "))
+                    if 1 <= choice <= len(model_choices):
+                        best_model = model_choices[choice - 1].Model
+                        break
+                    else:
+                        print("Invalid choice. Please enter a number from the list.")
+                except ValueError:
+                    print("Invalid input. Please enter a number.")
+
+        else:
+            best_model = best_models.loc[best_models.index[0], 'Model']
+
+        best_models_task[task] = best_model
         model_path = find_model_path(task, best_model)
         test_pred_file = os.path.join(
             EXPERIMENTS_PATH, model_path, 'test_predictions.csv')
 
-        print(f"Plotting Precision-Recall curve for {task}...")
+        print(
+            f"Plotting Precision-Recall curve for {task} using {best_model}...")
         params_file = os.path.join(
             os.path.dirname(test_pred_file), "params.json")
 
@@ -183,11 +218,13 @@ def plot_precision_recall_curve_all_tasks(task_model_performance: dict, save_dir
             is_multilabel = params.get("is_multilabel", True)
 
         y_true, _, probs = extract_predictions(test_pred_file, is_multilabel)
-        precision_recall_curve(y_true, probs, is_multilabel, task, ax)
+        precision_recall_curve(y_true, probs, is_multilabel,
+                               task, ax, best_model=best_model)
 
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, "precision_recall_curves.png"))
     plt.close()
+    return best_models_task
 
 
 def plot_model_metric_all_tasks(task_model_performance, metrics, save_dir):
@@ -316,15 +353,133 @@ def collect_metrics_all_tasks() -> dict:
     return task_model_performance
 
 
+def load_label_mapping(config_path):
+    """Loads the id2label mapping from a model's config.json."""
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = json.load(f)
+    return {int(k): v for k, v in config.get("id2label", {}).items()}
+
+
+def plot_performance_per_label(y_true, y_pred, label_mapping, save_path, task: str, model_name: str):
+    """Plots F1, Precision, Recall, and Accuracy per label with multiple rows for each metric and consistent colors."""
+
+    f1s = []
+    precisions = []
+    recalls = []
+    accuracies = []
+    sample_counts = []
+
+    if len(y_true.shape) == 1:  # Single-label classification
+        for label in label_mapping.keys():
+            y_true_binary = (y_true == label).astype(int)
+            y_pred_binary = (y_pred == label).astype(int)
+
+            f1 = f1_score(y_true_binary, y_pred_binary, zero_division=0)
+            f1s.append(f1)
+
+            prec = precision_score(y_true_binary, y_pred_binary, zero_division=0)
+            precisions.append(prec)
+
+            recall = recall_score(y_true_binary, y_pred_binary, zero_division=0)
+            recalls.append(recall)
+
+            accuracy = accuracy_score(y_true_binary, y_pred_binary)
+            accuracies.append(accuracy)
+
+            sample_count = np.sum(y_true_binary)
+            sample_counts.append(sample_count)
+
+    elif len(y_true.shape) == 2:  # Multi-label classification
+        for i in range(y_true.shape[1]):
+            f1 = f1_score(y_true[:, i], y_pred[:, i], zero_division=0)
+            f1s.append(f1)
+
+            prec = precision_score(y_true[:, i], y_pred[:, i], zero_division=0)
+            precisions.append(prec)
+
+            recall = recall_score(y_true[:, i], y_pred[:, i], zero_division=0)
+            recalls.append(recall)
+
+            accuracy = accuracy_score(y_true[:, i], y_pred[:, i])
+            accuracies.append(accuracy)
+
+            sample_count = np.sum(y_true[:, i])
+            sample_counts.append(sample_count)
+
+    labels = [label_mapping[label] for label in label_mapping.keys()]
+
+    metrics_df = pd.DataFrame({
+        "Label": labels,
+        "Sample Count": sample_counts,
+        "F1 Score": f1s,
+        "Precision": precisions,
+        "Recall": recalls,
+        "Accuracy": accuracies
+    })
+
+    metrics_df.set_index("Label", inplace=True)
+
+    ax = metrics_df.drop('Sample Count', axis=1).plot(kind="bar", figsize=(12, 10), subplots=True, layout=(
+        4, 1), legend=True, sharex=True, color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'])
+
+    for i in range(ax.shape[0]):
+        for j in range(ax.shape[1]):
+            ax[i, j].set_ylabel(metrics_df.columns[i + 1])
+            ax[i, j].set_ylim(0, 1)
+            for bar in ax[i, j].patches:
+                height = bar.get_height()
+                ax[i, j].text(bar.get_x() + bar.get_width() / 2, height + 0.01, f'{height:.2f}',
+                              ha='center', va='bottom')
+
+    for i, label in enumerate(metrics_df.index):
+        label_index = ax[0, 0].get_xticks()[i]
+        sample_count = metrics_df['Sample Count'].iloc[i]
+        ax[0, 0].text(label_index, 1.2, f'#: {int(sample_count)}', ha='center', va='bottom', fontsize=10, color='black')
+
+
+    plt.suptitle(f"{task} predicted by {model_name} - Performance per Label", fontsize=16)
+    plt.xticks(rotation=45, ha="right")
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.savefig(save_path)
+    plt.close()
+
+
 def main():
-    save_dir = "experiments/performance_plots"
+    save_dir = "model/performance_plots"
     task_model_performance = collect_metrics_all_tasks()
     plot_model_metric_all_tasks(task_model_performance,
                                 metrics=["F1", "Accuracy",
                                          "Precision", "Recall"],
                                 save_dir=save_dir)
-    plot_precision_recall_curve_all_tasks(
+    best_models = plot_precision_recall_curve_all_tasks(
         task_model_performance, save_dir=save_dir)
+
+    for task in TASKS:
+        task_key = task.lower().replace(" ", "_")
+        best_model = best_models[task_key]
+        model_path = find_model_path(task_key, best_model)
+        test_pred_file = os.path.join(
+            EXPERIMENTS_PATH, model_path, "test_predictions.csv")
+        checkpoints = [file for file in os.listdir(os.path.join(
+            EXPERIMENTS_PATH, model_path)) if 'checkpoint' in file]
+
+        config_file = os.path.join(
+            EXPERIMENTS_PATH, model_path, checkpoints[0], "config.json")
+        label_mapping = load_label_mapping(config_file)
+        params_file = os.path.join(
+            os.path.dirname(test_pred_file), "params.json")
+        with open(params_file, "r", encoding="utf-8") as f:
+            params = json.load(f)
+            is_multilabel = params.get("is_multilabel", True)
+        # Extract predictions
+        y_true, y_pred, _ = extract_predictions(test_pred_file, is_multilabel)
+
+        # Generate per-label performance plots
+        plot_path = os.path.join(save_dir, f"performance_{task_key}.png")
+        plot_performance_per_label(
+            y_true, y_pred, label_mapping, plot_path, task, best_model)
+
+        print(f"Saved per-label performance plot for {task}: {plot_path}")
 
 
 if __name__ == "__main__":

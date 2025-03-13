@@ -216,3 +216,5 @@ log/*
 training_scripts/*
 archive/*
 *env/*
+
+!model/peformance_plots/*
