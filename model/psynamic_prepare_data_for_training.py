@@ -291,7 +291,6 @@ def prepare_all(outfile_all: str, outfile_relevant: str, prodigy_data: ProdigyDa
     if prodigy_data:
         rejected = prodigy_data.rejected
         data_handler.add_data(rejected)
-
     # Save all data
     data_handler.df.to_csv(outfile_all, index=False)
 
@@ -330,7 +329,10 @@ if __name__ == '__main__':
     round1 = 'data/prepared_data/training_round1'
     prodigy_data = ProdigyDataCollector(
         list_jsonl, annotators, expert_annotator='Ben')
-
+        # write ids to file
+    with open('data/prepared_data/round1_ids.txt', 'w', encoding='utf-8') as f:
+        for id in sorted(prodigy_data.ids):
+            f.write(str(id)+'\n')
     outfile = os.path.join(round1, 'psychedelic_study_all.csv')
     outfile_relevant = os.path.join(round1, 'psychedelic_study_relevant.csv')
     prepare_all(outfile, outfile_relevant, prodigy_data)
@@ -373,17 +375,23 @@ if __name__ == '__main__':
         'both',
         'class',
         'ner',]
-    prodigy_data = ProdigyDataCollector(
+    prodigy_data_2 = ProdigyDataCollector(
         list_jsonl, annotators, expert_annotator='Ben_double_annot', purposes=purposes)
+
+    # write ids to file
+    with open('data/prepared_data/round2_ids.txt', 'w', encoding='utf-8') as f:
+        for id in sorted(prodigy_data_2.ids):
+            f.write(str(id)+'\n')
 
     outfile_all = 'data/prepared_data/psychedelic_study_all.csv'
     outfile_relevant = 'data/prepared_data/psychedelic_study_relevant.csv'
     round2_path = 'data/prepared_data/training_round2'
+    
     # Prepare all data (adding rejected samples to relevant/irrelevant + getting relevant samples)
-    prepare_all(outfile_all, outfile_relevant, prodigy_data)
+    prepare_all(outfile_all, outfile_relevant, prodigy_data_2)
     # Encode data for training all tasks
     prepare_train_data(
-        prodigy_data, outpath=round2_path)
+        prodigy_data_2, outpath=round2_path)
     # Split data for all tasks and relevant/irrelevant
     prepare_splits(round2_path, outfile_all)
     # Prepare NER data, fix duplicates and whitespace issues
