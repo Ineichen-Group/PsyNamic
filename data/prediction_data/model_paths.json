@@ -1,94 +1,92 @@
-{
-    "tasks": [
-        {
-            "task": "Study Type",
-            "model_path": "/data/vebern/models/clinicalbert_study_type_20250221/checkpoint-768",
-            "prediction_threshold": "0.18"
-        },
-        {
-            "task": "Study Purpose",
-            "model_path": "/data/vebern/models/biobert_study_purpose_20250221/checkpoint-950",
-            "prediction_threshold": "0.31"
-        },
-        {
-            "task": "Study Control",
-            "model_path": "/data/vebern/models/pubmedbert_study_control_20250221/checkpoint-776",
-            "prediction_threshold": "0.12"
-        },
-        {
-            "task": "Data Type",
-            "model_path": "/data/vebern/models/biobert_data_type_20250221/checkpoint-768",
-            "prediction_threshold": "0.5"
-        },
-        {
-            "task": "Data Collection",
-            "model_path": "/data/vebern/models/biobert_data_collection_20250221/checkpoint-768",
-            "prediction_threshold": "0.5"
-        },
-        {
-            "task": "Number of Participants",
-            "model_path": "/data/vebern/models/biolinkbert_number_of_participants_20250221/checkpoint-864 c",
-            "prediction_threshold": "0.5"
-        },
-        {
-            "task": "Sex of Participants",
-            "model_path": "/data/vebern/models/biobert_sex_of_participants_20250221/checkpoint-672",
-            "prediction_threshold": "0.5"
-        },
-        {
-            "task": "Age of Participants",
-            "model_path": "/data/vebern/models/pubmedbert_age_of_participants_20250221/checkpoint-672",
-            "prediction_threshold": "0.12"
-        },
-        {
-            "task": "Substances",
-            "model_path": "/data/vebern/models/biolinkbert_substances_20250228/checkpoint-2037",
-            "prediction_threshold": "0.16"
-        },
-        {
-            "task": "Application Form",
-            "model_path": "/data/vebern/models/scibert_application_form_20250221/checkpoint-1164",
-            "prediction_threshold": "0.10"
-        },
-        {
-            "task": "Regimen",
-            "model_path": "/data/vebern/models/pubmedbert_regimen_20250221/checkpoint-576",
-            "prediction_threshold": "0.43"
-        },
-        {
-            "task": "Setting",
-            "model_path": "/data/vebern/models/pubmedbert_setting_20250221/checkpoint-864",
-            "prediction_threshold": "0.10"
-        },
-        {
-            "task": "Substance Naivety",
-            "model_path": "/data/vebern/models/biomedbert-abstract_substance_naivety_20250221/checkpoint-679",
-            "prediction_threshold": "0.16"
-        },
-        {
-            "task": "Condition",
-            "model_path": "/data/vebern/models/pubmedbert_condition_20250221/checkpoint-1140",
-            "prediction_threshold": "0.22"
-        },
-        {
-            "task": "Outcomes",
-            "model_path": "/data/vebern/models/scibert_outcomes_20250221/checkpoint-1380",
-            "prediction_threshold": "0.18"
-        },
-        {
-            "task": "Clinical Trial Phase",
-            "model_path": "/data/vebern/models/clinicalbert_clinical_trial_phase_20250221/checkpoint-776",
-            "prediction_threshold": "0.12"
-        },
-        {
-            "task": "Study Conclusion",
-            "model_path": "/data/vebern/models/biolinkbert_study_conclusion_20250221/checkpoint-672",
-            "prediction_threshold": "0.10"
-        },
-        {
-            "task": "Relevant",
-            "model_path": "/data/vebern/models/biobert_relevant_20250306/checkpoint-2825",
-            "prediction_threshold": "0.5"
-        }
-    ]
-}
+[
+    {
+        "task": "Study Type",
+        "model_path": "/data/vebern/models/clinicalbert_study_type_20250221/checkpoint-768",
+        "prediction_threshold": "0.18"
+    },
+    {
+        "task": "Study Purpose",
+        "model_path": "/data/vebern/models/biobert_study_purpose_20250221/checkpoint-950",
+        "prediction_threshold": "0.31"
+    },
+    {
+        "task": "Study Control",
+        "model_path": "/data/vebern/models/pubmedbert_study_control_20250221/checkpoint-776",
+        "prediction_threshold": "0.12"
+    },
+    {
+        "task": "Data Type",
+        "model_path": "/data/vebern/models/biobert_data_type_20250221/checkpoint-768",
+        "prediction_threshold": "0.5"
+    },
+    {
+        "task": "Data Collection",
+        "model_path": "/data/vebern/models/biobert_data_collection_20250221/checkpoint-768",
+        "prediction_threshold": "0.5"
+    },
+    {
+        "task": "Number of Participants",
+        "model_path": "/data/vebern/models/biolinkbert_number_of_participants_20250221/checkpoint-864 c",
+        "prediction_threshold": "0.5"
+    },
+    {
+        "task": "Sex of Participants",
+        "model_path": "/data/vebern/models/biobert_sex_of_participants_20250221/checkpoint-672",
+        "prediction_threshold": "0.5"
+    },
+    {
+        "task": "Age of Participants",
+        "model_path": "/data/vebern/models/pubmedbert_age_of_participants_20250221/checkpoint-672",
+        "prediction_threshold": "0.12"
+    },
+    {
+        "task": "Substances",
+        "model_path": "/data/vebern/models/biolinkbert_substances_20250228/checkpoint-2037",
+        "prediction_threshold": "0.16"
+    },
+    {
+        "task": "Application Form",
+        "model_path": "/data/vebern/models/scibert_application_form_20250221/checkpoint-1164",
+        "prediction_threshold": "0.10"
+    },
+    {
+        "task": "Regimen",
+        "model_path": "/data/vebern/models/pubmedbert_regimen_20250221/checkpoint-576",
+        "prediction_threshold": "0.43"
+    },
+    {
+        "task": "Setting",
+        "model_path": "/data/vebern/models/pubmedbert_setting_20250221/checkpoint-864",
+        "prediction_threshold": "0.10"
+    },
+    {
+        "task": "Substance Naivety",
+        "model_path": "/data/vebern/models/biomedbert-abstract_substance_naivety_20250221/checkpoint-679",
+        "prediction_threshold": "0.16"
+    },
+    {
+        "task": "Condition",
+        "model_path": "/data/vebern/models/pubmedbert_condition_20250221/checkpoint-1140",
+        "prediction_threshold": "0.22"
+    },
+    {
+        "task": "Outcomes",
+        "model_path": "/data/vebern/models/scibert_outcomes_20250221/checkpoint-1380",
+        "prediction_threshold": "0.18"
+    },
+    {
+        "task": "Clinical Trial Phase",
+        "model_path": "/data/vebern/models/clinicalbert_clinical_trial_phase_20250221/checkpoint-776",
+        "prediction_threshold": "0.12"
+    },
+    {
+        "task": "Study Conclusion",
+        "model_path": "/data/vebern/models/biolinkbert_study_conclusion_20250221/checkpoint-672",
+        "prediction_threshold": "0.10"
+    },
+    {
+        "task": "Relevant",
+        "model_path": "/data/vebern/models/biobert_relevant_20250306/checkpoint-2825",
+        "prediction_threshold": "0.5"
+    }
+]
