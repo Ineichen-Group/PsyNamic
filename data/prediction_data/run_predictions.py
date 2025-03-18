@@ -5,46 +5,58 @@ import pandas as pd
 import os
 import json
 import time
+import subprocess
 
 PATH = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATHS = os.path.join(PATH, 'model_paths.json')
 RUN_SCRIPTS_DIR = os.path.join(PATH, 'run_scripts')
 LOG_DIR = os.path.join(PATH, 'logs')
-MODEL_SCRIPT = "/scratch/vebern/PsyNamic/models/model.py"
+MODEL_SCRIPT = "/home/vebern/scratch/PsyNamic/model/model.py"
 
 
-def create_sbatch_file(task: str, data_file: str, model_path: str, threshold: float):
-    job_name = f'Predict{task}'
-    log = f'{LOG_DIR}/{task}_pred_{data_file}.out'
+def create_sbatch_file(task: str, data_file: str, model_path: str, threshold: float, pred_dir: str):
+    task_name_caca= task.replace(' ', '_').replace('_', '')
+    task_name_lo = task.lower().replace(' ', '_')
+    data_name = os.path.splitext(data_file)[0]
     model_name = os.path.basename(os.path.dirname(model_path))
-    sbatch_file = f'{RUN_SCRIPTS_DIR}/{task}_{model_name}_pred_{data_file}.sh'
+
+    outfile = os.path.join(pred_dir, f'{task_name_lo}_{model_name}')
+    job_name = f'Predict{task_name_caca}'
+    log = f'{LOG_DIR}/{task_name_lo}_pred_{data_name}.out'
+    sbatch_file = f'{RUN_SCRIPTS_DIR}/{task_name_lo}_{model_name}_pred_{data_name}.sh'
     # produce the bash script
     with open(sbatch_file, 'w', encoding='utf-8') as f:
-        f.write(f'''
-        #!/bin/bash
-                
-    
-        #SBATCH --time=0-00:05:00   ## days-hours:minutes:seconds
-        #SBATCH --gpus=1
-        #SBATCH --mem=4GB          
-        #SBATCH --ntasks=1          
-        #SBATCH --cpus-per-task=1   ## Use greater than 1 for parallelized jobs
-        #SBATCH --job-name={job_name} ## job name
-        #SBATCH --output={log}  ## standard out file
-        #SBATCH --partition=lowprio
+        f.write(f'''#!/bin/bash
+        
 
-        python {MODEL_SCRIPT} --mode pred --load {model_path} --data {data_file} --threshold {threshold}
-        ''')
+#SBATCH --time=0-00:05:00   ## days-hours:minutes:seconds
+#SBATCH --gpus=1
+#SBATCH --mem=4GB          
+#SBATCH --ntasks=1          
+#SBATCH --cpus-per-task=1   ## Use greater than 1 for parallelized jobs
+#SBATCH --job-name={job_name} ## job name
+#SBATCH --output={log}  ## standard out file
+#SBATCH --partition=lowprio
+
+python {MODEL_SCRIPT} --mode pred --load {model_path} --data {data_file} --threshold {threshold} --outfile {outfile}''')
     # make the script executable
     os.system(f'chmod +x {sbatch_file}')
     return sbatch_file
 
 
 def submit_all_jobs():
-    # submit all jobs within the run_scripts directory
     for file in os.listdir(RUN_SCRIPTS_DIR):
         if file.endswith('.sh'):
-            os.system(f'sbatch {os.path.join(RUN_SCRIPTS_DIR, file)}')
+            script_path = os.path.join(RUN_SCRIPTS_DIR, file)
+            process = subprocess.Popen(['sbatch', script_path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+            # Print output line by line
+            for line in process.stdout:
+                print(line, end='')
+            for line in process.stderr:
+                print(line, end='')
+
+            process.wait()
     return
 
 
@@ -60,7 +72,6 @@ def check_if_jobs_done(nr_expected_outfiles: int, pred_dir: str, timeout: int = 
 
 
 def combine_predictions(time: str, pred_dir: str, date: str):
-    # combine all predictions into one file
     all_preds = pd.DataFrame()
     for file in os.listdir(pred_dir):
         if file.endswith('.csv'):
@@ -99,7 +110,7 @@ def main():
         for task_dict in tasks:
             if task_dict['task'] == "Relevant":
                 create_sbatch_file(
-                    task_dict['task'], args.data, task_dict['model_path'], task_dict['prediction_threshold'])
+                    task_dict['task'], args.data, task_dict['model_path'], task_dict['prediction_threshold'], prediction_dir)
 
         submit_all_jobs()
         check_if_jobs_done(1, prediction_dir, timeout=1800)
@@ -110,12 +121,12 @@ def main():
         for file in os.listdir(RUN_SCRIPTS_DIR):
             os.remove(os.path.join(RUN_SCRIPTS_DIR, file))
 
-    nr_jobs = len(tasks) if not args.relevant_det else len(tasks) - 1
+    nr_jobs = len(tasks) if args.relevant_det else len(tasks) - 1
     for task_dict in tasks:
         if task_dict['task'] == "Relevant":
             continue
         create_sbatch_file(
-            task_dict['task'], data, task_dict['model_path'], task_dict['prediction_threshold'])
+            task_dict['task'], data, task_dict['model_path'], task_dict['prediction_threshold'], prediction_dir)
 
     submit_all_jobs()
     check_if_jobs_done(nr_jobs, prediction_dir, timeout=1800)
@@ -123,3 +134,7 @@ def main():
 
     time_elapsed_str = time.strftime("%H:%M:%S", time.gmtime(time_elapsed))
     combine_predictions(time_elapsed_str, prediction_dir, today)
+
+
+if __name__ == "__main__":
+    main()
