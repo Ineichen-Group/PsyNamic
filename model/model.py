@@ -201,6 +201,7 @@ def init_argparse():
 
     # PRED/EVAL:
     parser.add_argument('--outfile', type=str, default=None)
+    parser.add_argument('--threshold', type=float, default=0.5)
     return parser.parse_args()
 
 
@@ -605,7 +606,7 @@ def load_and_predict(args: argparse.Namespace) -> None:
         dataset = load_data(
             args.data, data_meta_file, args.model)[1]
         outfile_name = f'{os.path.basename(args.load)}_test_split'
-        outfile = predict_evaluate(exp_path, trainer, dataset, outfile_name)
+        outfile = predict_evaluate(exp_path, trainer, dataset, outfile_name, threshold=args.threshold)
     else:
         if os.path.isfile(args.data):
             data = args.data
@@ -626,7 +627,7 @@ def load_and_predict(args: argparse.Namespace) -> None:
         dataset = SimpleDataset(
             data, tokenizer, args.max_length, multilabel=is_multilabel)
         outfile_name = f'{os.path.basename(args.load)}_{os.path.basename(data).split(".")[0]}'
-        outfile = predict_evaluate(exp_path, trainer, dataset, outfile_name)
+        outfile = predict_evaluate(exp_path, trainer, dataset, outfile_name, threshold=args.threshold)
     return outfile
 
 
