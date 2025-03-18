@@ -6,6 +6,7 @@ import os
 import json
 import time
 import subprocess
+from ast import literal_eval
 
 PATH = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATHS = os.path.join(PATH, 'model_paths.json')
@@ -20,7 +21,7 @@ def create_sbatch_file(task: str, data_file: str, model_path: str, threshold: fl
     data_name = os.path.splitext(data_file)[0]
     model_name = os.path.basename(os.path.dirname(model_path))
 
-    outfile = os.path.join(pred_dir, f'{task_name_lo}_{model_name}')
+    outfile = os.path.join(pred_dir, model_name)
     job_name = f'Predict{task_name_caca}'
     log = f'{LOG_DIR}/{task_name_lo}_pred_{data_name}.out'
     sbatch_file = f'{RUN_SCRIPTS_DIR}/{task_name_lo}_{model_name}_pred_{data_name}.sh'
@@ -71,12 +72,51 @@ def check_if_jobs_done(nr_expected_outfiles: int, pred_dir: str, timeout: int = 
         f"Timeout reached: Expected {nr_expected_outfiles} output files, found {len(outfiles)}")
 
 
-def combine_predictions(time: str, pred_dir: str, date: str):
-    all_preds = pd.DataFrame()
+def combine_predictions(time: str, pred_dir: str, date: str, tasks: list[dict]):
+    all_preds = []
     for file in os.listdir(pred_dir):
-        if file.endswith('.csv'):
-            preds = pd.read_csv(os.path.join(pred_dir, file))
-            all_preds = pd.concat([all_preds, preds], axis=1)
+        file_comp = file.split('_')
+        task = ''
+        for c in file_comp[1:]:
+            # if c consists of numbers only --> date
+            if c.isdigit():
+                task = task.rstrip()
+                break
+            task += c + ' '
+        
+        task_dict = tasks[task.lower()]
+        predictions = pd.read_csv(os.path.join(pred_dir, file))
+        for i, row in predictions.iterrows():
+            id2label = {int(k): v for k, v in task_dict['id2label'].items()}
+            if task_dict['is_multilabel']:
+
+                onehot_pred = literal_eval(row['prediction'])
+                probabilities = literal_eval(row['probability']) 
+                for i, label in enumerate(onehot_pred):
+                    if label == 1:
+                        output_line = {
+                            'id': row['id'],
+                            'task': task_dict['task'],
+                            'label': id2label[i],
+                            'probability': probabilities[i],
+                            'model': os.path.basename(os.path.dirname(task_dict['model_path'])),
+                            'is_multilabel': True
+                        }
+                        all_preds.append(output_line)
+            else:
+                prediction = row['prediction']
+                probabilities = literal_eval(row['probability'])
+                output_line = {
+                    'id': row['id'],
+                    'task': task_dict['task'],
+                    'label': id2label[prediction],
+                    'probability': probabilities[prediction],
+                    'model': os.path.basename(os.path.dirname(task_dict['model_path'])),
+                    'is_multilabel': False
+                }
+                all_preds.append(output_line)
+        
+    all_preds = pd.DataFrame(all_preds)
     all_preds.to_csv(
         f'{pred_dir}/all_predictions_{date}_{time}.csv', index=False)
 
@@ -131,9 +171,11 @@ def main():
     submit_all_jobs()
     check_if_jobs_done(nr_jobs, prediction_dir, timeout=1800)
     time_elapsed = time.time() - start_time
-
     time_elapsed_str = time.strftime("%H:%M:%S", time.gmtime(time_elapsed))
-    combine_predictions(time_elapsed_str, prediction_dir, today)
+
+    tasks = {task['task'].lower(): task for task in tasks}
+
+    combine_predictions(time_elapsed_str, prediction_dir, today, tasks)
 
 
 if __name__ == "__main__":
