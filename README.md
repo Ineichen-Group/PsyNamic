@@ -1,10 +1,12 @@
-# PsychNER
+# PsyNamic
 A project to automatically extract relevant information from abstracts of clincal studies about psychedelic treatments of psychiatric conditions.
-This includes named entity recognition and single-/multilabel classification via fine-tuned Bert-based models.
+This includes named entity recognition and single-/multilabel classification via fine-tuned BERT-based models.
 
 This repository includes two submodule:
 .
+
 |-- PsyNamic-Webapp --> the webapp written in dash
+
 |-- PsyNamic-Prodigy --> the dockerized prodigy setup used for annotating data
 
 
