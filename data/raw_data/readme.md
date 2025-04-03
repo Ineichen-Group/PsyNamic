@@ -19,3 +19,5 @@
     * cleaned relevant data from `asreview_dataset_all_Psychedelic Study.csv`
         * add field text = title + .^\n + abstract
         * add pubmed url from doi (if doi is available)
+    
+    Note: during annotation, some additional records were marked as irrelevant, look at --> data_prepared/psychedelic_study_relevant.csv for the final list of included studies.
