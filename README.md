@@ -3,11 +3,11 @@ A project to automatically extract relevant information from abstracts of clinca
 This includes named entity recognition and single-/multilabel classification via fine-tuned BERT-based models.
 
 This repository includes two submodule:
-.
 
-|-- PsyNamic-Webapp --> the webapp written in dash
 
-|-- PsyNamic-Prodigy --> the dockerized prodigy setup used for annotating data
+`|-- PsyNamic-Webapp`: the webapp written in dash
+
+`|-- PsyNamic-Prodigy`: the dockerized prodigy setup used for annotating data
 
 
 ## How to install
