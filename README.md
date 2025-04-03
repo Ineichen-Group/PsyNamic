@@ -39,25 +39,19 @@ git commit -m "Updated submodule references to the latest commit"
 git push origin main
 ```
 
-## Medical (L)LM and other methods
-Curated list medical LLM on Github: [Awesome Medical LLM](https://github.com/burglarhobbit/Awesome-Medical-Large-Language-Models)
-### Encoder models
-* BioClincialBert
-* BioBERT
-* BioLinkBERT
-* PubMedBert
-* ClinicalBert
-### Decoder models
-* MEDITRON: [GitHub](https://github.com/epfLLM/meditron)
-* BioBart
-* BioGPT
-* ClinicalT5
-* PMC-LlaMA
+## What is where?
 
-### Other ideas
-* BiLSTM with CRF
-* Data Augmentation via pertubation
-* Ensemble methods with different Bert-based methods
-
-### Models that already do Medical NER
-[Biomed NER](https://huggingface.co/d4data/biomedical-ner-all)
+* Anything related to the data and the annotation process is in the `data` folder
+    * `data/raw_data` contains the raw data from the literature search with ASReview and David's relevant/irrelevant classification
+    * `data/prepared_data` contains the annotated data, cleaned and ready for training
+    * `data/prodigy_inputs` and `data/prodigy_exports` contains the unannotated prodigy input and the annotated prodigy output
+    * `data/iaa` contains the inter-annotator agreement data
+    * `data/prediction_data` contains the unannoated data for the prediction and the whole pulling newest research from PubMed pipeline
+    * it also contains all scripts to process the data #TODO: adjust paths; I moved some scripts around
+* `models` conains
+    * the scripts for training and feeding data while training
+    * performance evaluation and plots
+    --> the actual trained models are on the server
+* `PsyNamic-Webapp` contains the webapp for the living systematic review
+* `PsyNamic-Prodigy` contains the prodigy setup for the annotation process
+* `test` contains some not up-to-dat test cases for the data processing
