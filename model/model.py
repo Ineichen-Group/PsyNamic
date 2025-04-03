@@ -178,7 +178,7 @@ def init_argparse():
 
     # TRAIN:
     # General
-    parser.add_argument('--model', type=str)
+    parser.add_argument('--model', type=str, default='')
     # TODO: Implement cross validation
     parser.add_argument('--cross_val', type=bool, default=False)
 
@@ -220,6 +220,10 @@ def save_train_args(project_dir: str, args: argparse.Namespace, add_params: dict
 def set_args_from_file(args: argparse.Namespace) -> argparse.Namespace:
     """Set arguments from a params.json file in the experiment folder."""
     params_json = os.path.join(os.path.dirname(args.load), 'params.json')
+
+    if not os.path.exists(params_json):
+        raise ValueError(f"File {params_json} can't be found.")
+    
     with open(params_json, 'r') as f:
         params = json.load(f)
 
@@ -410,7 +414,7 @@ def train(
     return trainer
 
 
-def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[DataSplit, DataSplitBIO], outfile: str = None, threshold: float = 0.5) -> tuple[str, Union[str, None]]:
+def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[DataSplit, DataSplitBIO], outfile: str = None, threshold: float = 0.5, metrics: bool=True) -> tuple[str, Union[str, None]]:
     """ Predicts the labels for the test split or any other dataset and saves predictions and metrics to a file.
         In case its only prediction and true labels are not provided, only the predictions will be saved.
 
@@ -425,11 +429,6 @@ def predict_evaluate(project_folder: str, trainer: Trainer, test_dataset: Union[
         str: outfile path
     """
     predictions = trainer.predict(test_dataset)
-    # If the true labels are provided, compute metrics
-    try:
-        metrics = predictions.metrics
-    except:
-        metrics = None
     report_df = None
 
     # Collect prediction, probability and true labels
@@ -605,29 +604,26 @@ def load_and_predict(args: argparse.Namespace) -> None:
         data_meta_file = os.path.join(args.data, 'meta.json')
         dataset = load_data(
             args.data, data_meta_file, args.model)[1]
-        outfile_name = f'{os.path.basename(args.load)}_test_split'
-        outfile = predict_evaluate(exp_path, trainer, dataset, outfile_name, threshold=args.threshold)
+        if not args.outfile:
+            outfile_name = f'{os.path.basename(args.load)}_test_split'
+        else:
+            outfile_name = args.outfile
+        outfile = predict_evaluate(exp_path, trainer, dataset, outfile_name, threshold=args.threshold, metrics=False)
     else:
         if os.path.isfile(args.data):
             data = args.data
         else:
-            raise ValueError('Please provide a valid path to the data file')
-        # search for data_meta_file in parent directory
-        data_meta_file = os.path.join(os.path.dirname(data), 'meta.json')
-
-        # check if there is a meta file in the data directory
-        if not os.path.exists(data_meta_file):
-            raise ValueError(
-                'Please provide a valid path to the data directory with a meta.json file')
-        # Load meta.json
-        meta_data = json.load(open(data_meta_file, 'r', encoding='utf-8'))
-        is_multilabel = meta_data['Is_multilabel']
-        model = MODEL_IDENTIFIER[args.model]
-        tokenizer = AutoTokenizer.from_pretrained(model)
+            raise ValueError('Please provide a valid path to the data file')    
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_IDENTIFIER[args.model])
         dataset = SimpleDataset(
-            data, tokenizer, args.max_length, multilabel=is_multilabel)
-        outfile_name = f'{os.path.basename(args.load)}_{os.path.basename(data).split(".")[0]}'
-        outfile = predict_evaluate(exp_path, trainer, dataset, outfile_name, threshold=args.threshold)
+            data, tokenizer, args.max_length, multilabel=args.is_multilabel)
+        if not args.outfile:
+            outfile_name = f'{os.path.basename(args.load)}_{os.path.basename(data).split(".")[0]}'
+        else:
+            outfile_name = args.outfile
+
+        outfile = predict_evaluate(exp_path, trainer, dataset, outfile_name, threshold=args.threshold, metrics=False)
+    
     return outfile
 
 
