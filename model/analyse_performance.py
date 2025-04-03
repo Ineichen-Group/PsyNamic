@@ -444,42 +444,123 @@ def plot_performance_per_label(y_true, y_pred, label_mapping, save_path, task: s
     plt.close()
 
 
+def plot_best_f1_scores(directory):
+    task_data = []
+
+    # Iterate through CSV files in the directory
+    for filename in os.listdir(directory):
+        if filename.endswith(".csv"):
+            task_name = filename.replace("model_performance_", "").replace(".csv", "").replace("_", " ").title()
+
+            # Load CSV
+            df = pd.read_csv(os.path.join(directory, filename))
+
+            # Find the row with the highest F1 score
+            best_model = df.loc[df['F1'].idxmax()]
+            
+            # Store relevant data
+            task_data.append({
+                "task": task_name,
+                "model": best_model["Model"],
+                "f1_score": best_model["F1"],
+                "ci_lower": best_model["F1 CI Lower"],
+                "ci_upper": best_model["F1 CI Upper"]
+            })
+
+    # Convert to DataFrame
+    df_tasks = pd.DataFrame(task_data)
+
+    # Sort by F1 score for better visualization
+    df_tasks = df_tasks.sort_values(by="f1_score", ascending=False).reset_index(drop=True)
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Bar plot without built-in error bars
+    sns.barplot(
+        x="task",
+        y="f1_score",
+        hue="model",
+        data=df_tasks,
+        palette=MODEL_COLORS,
+        ax=ax,
+        legend=False,
+        errorbar=None
+    )
+
+    # Add error bars manually
+    for index, row in df_tasks.iterrows():
+        yerr_lower = row["f1_score"] - row["ci_lower"]
+        yerr_upper = row["ci_upper"] - row["f1_score"]
+        ax.errorbar(index, row["f1_score"],
+                    yerr=[[yerr_lower], [yerr_upper]],
+                    fmt='none', color='black', capsize=5)
+
+        # Display values
+        ax.text(index, row["f1_score"] - 0.2,
+                f"{row['f1_score']:.3f}", ha="center", color="black", fontsize=10)
+
+        ax.text(index, row["ci_lower"] - 0.04,
+                f"{row['ci_lower']:.3f}", ha="center", va="bottom", color="black", fontsize=8)
+
+        ax.text(index, row["ci_upper"] + 0.01,
+                f"{row['ci_upper']:.3f}", ha="center", va="bottom", color="black", fontsize=8)
+        
+    # Legend for colors
+    for model, color in MODEL_COLORS.items():
+        ax.bar(0, 0, color=color, label=model)
+    ax.legend(title="Model", loc="upper left", bbox_to_anchor
+              =(1, 1), title_fontsize="small")
+    
+    # Add some padding at bottom so labels are not cut off
+    plt.gcf().subplots_adjust(bottom=0.2)
+
+    # Formatting
+    ax.set_ylabel("Best F1 Score")
+    ax.set_title("Best F1 Score per Task")
+    ax.set_xticks(np.arange(len(df_tasks)))
+    ax.set_xticklabels(df_tasks["task"], rotation=45, ha="right")
+    ax.set_ylim(0, 1)
+
+    plt.show()
+
 def main():
-    save_dir = "model/performance_plots"
-    task_model_performance = collect_metrics_all_tasks()
-    plot_model_metric_all_tasks(task_model_performance,
-                                metrics=["F1", "Accuracy",
-                                         "Precision", "Recall"],
-                                save_dir=save_dir)
-    best_models = plot_precision_recall_curve_all_tasks(
-        task_model_performance, save_dir=save_dir)
+    plot_best_f1_scores('/home/vera/Documents/Arbeit/CRS/PsychNER/model')
+    # save_dir = "model/performance_plots"
+    # task_model_performance = collect_metrics_all_tasks()
+    # plot_model_metric_all_tasks(task_model_performance,
+    #                             metrics=["F1", "Accuracy",
+    #                                      "Precision", "Recall"],
+    #                             save_dir=save_dir)
+    # best_models = plot_precision_recall_curve_all_tasks(
+    #     task_model_performance, save_dir=save_dir)
+    # breakpoint()
+    # for task in TASKS:
+    #     task_key = task.lower().replace(" ", "_")
+    #     best_model = best_models[task_key]
+    #     model_path = find_model_path(task_key, best_model)
+    #     test_pred_file = os.path.join(
+    #         EXPERIMENTS_PATH, model_path, "test_predictions.csv")
+    #     checkpoints = [file for file in os.listdir(os.path.join(
+    #         EXPERIMENTS_PATH, model_path)) if 'checkpoint' in file]
 
-    for task in TASKS:
-        task_key = task.lower().replace(" ", "_")
-        best_model = best_models[task_key]
-        model_path = find_model_path(task_key, best_model)
-        test_pred_file = os.path.join(
-            EXPERIMENTS_PATH, model_path, "test_predictions.csv")
-        checkpoints = [file for file in os.listdir(os.path.join(
-            EXPERIMENTS_PATH, model_path)) if 'checkpoint' in file]
+    #     config_file = os.path.join(
+    #         EXPERIMENTS_PATH, model_path, checkpoints[0], "config.json")
+    #     label_mapping = load_label_mapping(config_file)
+    #     params_file = os.path.join(
+    #         os.path.dirname(test_pred_file), "params.json")
+    #     with open(params_file, "r", encoding="utf-8") as f:
+    #         params = json.load(f)
+    #         is_multilabel = params.get("is_multilabel", True)
+    #     # Extract predictions
+    #     y_true, y_pred, _ = extract_predictions(test_pred_file, is_multilabel)
 
-        config_file = os.path.join(
-            EXPERIMENTS_PATH, model_path, checkpoints[0], "config.json")
-        label_mapping = load_label_mapping(config_file)
-        params_file = os.path.join(
-            os.path.dirname(test_pred_file), "params.json")
-        with open(params_file, "r", encoding="utf-8") as f:
-            params = json.load(f)
-            is_multilabel = params.get("is_multilabel", True)
-        # Extract predictions
-        y_true, y_pred, _ = extract_predictions(test_pred_file, is_multilabel)
+    #     # Generate per-label performance plots
+    #     plot_path = os.path.join(save_dir, f"performance_{task_key}.png")
+    #     plot_performance_per_label(
+    #         y_true, y_pred, label_mapping, plot_path, task, best_model)
 
-        # Generate per-label performance plots
-        plot_path = os.path.join(save_dir, f"performance_{task_key}.png")
-        plot_performance_per_label(
-            y_true, y_pred, label_mapping, plot_path, task, best_model)
-
-        print(f"Saved per-label performance plot for {task}: {plot_path}")
+    #     print(f"Saved per-label performance plot for {task}: {plot_path}")
 
 
 if __name__ == "__main__":

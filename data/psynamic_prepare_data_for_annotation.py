@@ -6,6 +6,7 @@ from datetime import datetime
 from tqdm import tqdm
 import os
 import time
+from xml.etree import ElementTree
 
 ANNOTATION_DIR = 'prodigy_inputs/annotation_logs/'
 PRODIGY_INPUTS_DIR = 'prodigy_inputs/'
@@ -21,7 +22,7 @@ ANNOTATION_GROUPS = ['Study Characteristics',
 # 6. Some more helper functions to manage the annotation process
 
 
-def get_url(doi: str) -> str:
+def get_url(doi: str, title: str='') -> str:
     """Get the link to pubmed of the article with the given DOI."""
     if not doi:
         return ''
@@ -49,7 +50,6 @@ def get_url(doi: str) -> str:
 
             # Construct PubMed URL
             pubmed_url = f'https://pubmed.ncbi.nlm.nih.gov/{pmid}/'
-
             return pubmed_url
         else:
             return ''
@@ -58,6 +58,101 @@ def get_url(doi: str) -> str:
         # Handle any exceptions (e.g., network errors, JSON parsing errors)
         print(f"Error occurred: {e}")
         return ''
+    
+def get_pubmed_id_from_title(title: str) -> str:
+    """
+    Searches PubMed for a given article title and returns the corresponding PubMed ID (PMID).
+
+    Args:
+        title (str): The title of the article to search for.
+
+    Returns:
+        str: The PubMed ID (PMID) if found, otherwise None.
+    """
+    base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+    params = {
+        "db": "pubmed",
+        "term": title,
+        "retmode": "xml",
+        "retmax": 1  # Get only the first result
+    }
+    
+    response = requests.get(base_url, params=params)
+    if response.status_code == 200: 
+        root = ElementTree.fromstring(response.content)
+        pmid_elem = root.find(".//Id")
+        message = root.find(".//OutputMessage")
+        if message is not None and message.text == 'No items found.':
+            return None
+        if pmid_elem is not None:
+            pmid = pmid_elem.text
+            # Verify the title matches
+            fetched_title = fetch_title_from_pubmed_id(pmid)
+            if fetched_title and title.lower() == fetched_title.lower():
+                return pmid
+            else:
+                return None
+    return None
+
+
+def fetch_title_from_pubmed_id(pmid: str) -> str:
+    """
+    Fetches the title of a PubMed article using its PubMed ID.
+
+    Args:
+        pmid (str): The PubMed ID of the article.
+
+    Returns:
+        str: The title of the article, or None if not found.
+    """
+    base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+    params = {
+        "db": "pubmed",
+        "id": pmid,
+        "retmode": "xml"
+    }
+    
+    response = requests.get(base_url, params=params)
+    if response.status_code == 200:
+        root = ElementTree.fromstring(response.content)
+        title_elem = root.find(".//Item[@Name='Title']")
+        if title_elem is not None:
+            return title_elem.text
+    return None
+    
+def pubmed_id_valid(pubmed_id: str, titel: str) -> dict:
+    """
+    Fetches the title of a PubMed article using its PubMed ID.
+    
+    Args:
+        pubmed_id (str or int): The PubMed ID of the article.
+    
+    Returns:
+        str: The title of the article, or None if not found.
+    """
+    base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+    params = {
+        "db": "pubmed",
+        "id": pubmed_id,
+        "retmode": "xml"
+    }
+    # if pubmed is nan
+    if pd.isna(pubmed_id):
+        return
+    response = requests.get(base_url, params=params)
+    
+    if response.status_code == 200:
+        root = ElementTree.fromstring(response.content)
+        title_elem = root.find(".//Item[@Name='Title']")
+        if title_elem is not None:
+            if title_elem.text == titel:
+                return True
+            elif titel in title_elem.text:
+                return True
+            else:
+                return False
+    else:
+        return False
 
 
 def prepare_data(df: pd.DataFrame) -> pd.DataFrame:
@@ -253,6 +348,28 @@ def extract_pubmed_id(csv_file: str) -> None:
         df = pd.read_csv(infile)
         df['pubmed_id'] = df['pubmed_url'].apply(lambda x: pubmed_url_to_id(x))
         df.to_csv(csv_file, index=False)
+
+def fix_pubmed_id(csv_file: str) -> None:
+    outdata = []
+    with open(csv_file, 'r', encoding='utf-8') as infile:
+        df = pd.read_csv(infile)
+        for index, row in df.iterrows():
+            print(f'Processing {index}')
+            if pubmed_id_valid(row['pubmed_id'], row['title']):
+                outdata.append(row)
+            else:
+                pubmed_id = get_pubmed_id_from_title(row['title'])
+                if not pubmed_id:
+                    row['pubmed_id'] = ''
+                    row['pubmed_url'] = ''
+                else:
+                    row['pubmed_id'] = pubmed_id
+                    row['pubmed_url'] = f'https://pubmed.ncbi.nlm.nih.gov/{pubmed_id}/'
+                outdata.append(row)
+    out_df = pd.DataFrame(outdata)
+    out_df.to_csv(csv_file, index=False)
+            
+
 def main():
 
     # Load the raw data and prepare it
@@ -355,7 +472,8 @@ def main():
     # annotation_progress()
 
     # add_missing_annotation_log()
-    extract_pubmed_id('data/raw_data/dataset_relevant_cleaned.csv')
+    # extract_pubmed_id('data/raw_data/dataset_relevant_cleaned.csv')
+    fix_pubmed_id('data/raw_data/dataset_relevant_cleaned.csv')
 
 if __name__ == '__main__':
 

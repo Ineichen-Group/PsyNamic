@@ -35,7 +35,7 @@
             "justMyCode": false,
             "args": [
                 "--model", "pubmedbert",
-                "--data", "data/prepared_data/ner_bio",
+                "--data", "data/prepared_data/training_round2/ner_bio",
                 "--task", "NER",
                 "--epoch", "10"
             ]

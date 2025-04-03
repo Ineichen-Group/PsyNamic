@@ -298,7 +298,7 @@ def prepare_all(outfile_all: str, outfile_relevant: str, prodigy_data: ProdigyDa
     # where included is 1
     df = data_handler.df[data_handler.df['labels'] == 1]
     df = df.drop(columns=['labels'])
-    df.to_csv(outfile_relevant, index=False)
+    df.to_csv(outfile_relevant, index=False, encoding='utf-8')
 
 
 if __name__ == '__main__':
